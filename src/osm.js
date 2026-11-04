@@ -41,7 +41,6 @@ export function processOverpass( json ) {
 		if ( el.type !== 'way' || ! el.tags ) continue;
 		const tg = el.tags;
 		if ( tg.area === 'yes' || tg.access === 'private' || tg.access === 'no' ) continue;
-		if ( tg.footway === 'crossing' ) continue;
 		const n = [];
 		for ( const id of el.nodes ) {
 
@@ -64,6 +63,7 @@ export function processOverpass( json ) {
 		const w = { t: tg.highway, o, n };
 		if ( tg.lanes ) w.l = parseInt( tg.lanes, 10 ) || undefined;
 		if ( tg.name ) w.name = tg.name;
+		if ( tg.footway === 'crossing' || tg.highway === 'crossing' ) w.c = 1; // crosswalk
 		ways.push( w );
 
 	}
