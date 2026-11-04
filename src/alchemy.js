@@ -1025,8 +1025,21 @@ export function createAlchemy( { scene, camera, rig, castRay, castTerrain, audio
 
 	}
 
+	// A circle, arcs and dust without making stone: used when vehicles are summoned.
+	function flourish( point, radius, duration = 1 ) {
+
+		spawnCircle( point, UP, radius, duration + 1.2 );
+		addArcs( point, radius * 0.9, duration, 10 );
+		spawnDust( point, radius * 0.7, 50 );
+		pulseFlash( point, 8 );
+		startRipple( point, 0.22 );
+		audio?.transmute( duration );
+
+	}
+
 	return {
 		solids,
+		flourish,
 		patchMaterial,
 		update,
 		trackPalms,

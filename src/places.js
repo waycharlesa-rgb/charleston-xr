@@ -64,3 +64,28 @@ export const PLACES = [
 
 // The scene origin sits here, so local coordinates stay small and precise.
 export const ORIGIN = { lat: 32.7760, lon: - 79.9300 };
+
+// Where boats are launched: open water off the peninsula. `look` points to open water.
+export const BOAT_SPOTS = [
+	{
+		id: 'boat-battery',
+		name: 'Charleston Harbor',
+		blurb: 'Off the Battery, with Fort Sumter out ahead.',
+		lat: 32.76650, lon: - 79.92500,
+		look: { lat: 32.75230, lon: - 79.87470 },
+	},
+	{
+		id: 'boat-cooper',
+		name: 'Cooper River',
+		blurb: 'Off Waterfront Park, under the sea breeze.',
+		lat: 32.77900, lon: - 79.92050,
+		look: { lat: 32.77000, lon: - 79.91000 },
+	},
+	{
+		id: 'boat-ashley',
+		name: 'Ashley River',
+		blurb: 'Off Murray Boulevard, looking toward James Island.',
+		lat: 32.76800, lon: - 79.93600,
+		look: { lat: 32.76000, lon: - 79.94500 },
+	},
+];

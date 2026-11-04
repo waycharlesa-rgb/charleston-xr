@@ -10,9 +10,11 @@ import {
 	UnloadTilesPlugin,
 } from '3d-tiles-renderer/three/plugins';
 import { computeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
-import { PLACES, ORIGIN } from './places.js';
+import { PLACES, ORIGIN, BOAT_SPOTS } from './places.js';
 import { HarborAmbience } from './audio.js';
 import { createAlchemy } from './alchemy.js';
+import { createVehicles, SPECS } from './vehicles.js';
+import { createWristMenu } from './wristmenu.js';
 
 const D2R = Math.PI / 180;
 const WALK = 1.4; // m/s, an easy stroll
@@ -86,6 +88,7 @@ const ui = {
 	hudPlace: $( 'hud-place' ),
 	hudMode: $( 'hud-mode' ),
 	hudMenu: $( 'hud-menu' ),
+	vehicleExit: $( 'vehicle-toggle' ),
 	hint: $( 'hint' ),
 	crosshair: $( 'crosshair' ),
 	attribution: $( 'attribution' ),
@@ -141,6 +144,17 @@ su.rayleigh.value = 1.4;
 su.mieCoefficient.value = 0.004;
 su.mieDirectionalG.value = 0.82;
 su.sunPosition.value.setFromSphericalCoords( 1, ( 90 - 28 ) * D2R, 245 * D2R );
+{
+
+	// Reflections for car paint, chrome, glass and the boat's hull come from this sky.
+	const pmrem = new THREE.PMREMGenerator( renderer );
+	const envScene = new THREE.Scene();
+	envScene.add( sky );
+	scene.environment = pmrem.fromScene( envScene, 0, 0.1, 1000 ).texture;
+	pmrem.dispose();
+
+}
+
 scene.add( sky );
 
 const ambience = new HarborAmbience();
@@ -393,6 +407,12 @@ const alchemy = createAlchemy( {
 	scene, camera, rig, castRay, castTerrain, audio: ambience, notify, haptics,
 } );
 
+const vehicles = createVehicles( {
+	scene, castRay, castTerrain, audio: ambience, notify, haptics, flourish: alchemy.flourish,
+} );
+
+const wrist = createWristMenu( { scene, haptics, audio: ambience, onSelect: menuSelect } );
+
 // ---------------------------------------------------------------- player pose
 
 const head = new THREE.Vector3();
@@ -425,6 +445,14 @@ function headYaw() {
 // Turn the player around their own head, so turning never slides them sideways.
 function turnBy( angle ) {
 
+	if ( vehicles.riding ) {
+
+		seatYawOffset += angle;
+		turnFlash = 0.15;
+		return;
+
+	}
+
 	readHead();
 	const before = head.clone();
 	rig.rotation.y += angle;
@@ -436,11 +464,16 @@ function turnBy( angle ) {
 
 }
 
-function goTo( place, initial = false ) {
+function goTo( place, initial = false, remember = true ) {
 
 	if ( ! rootReady ) return;
-	ui.place.value = place.id;
-	store.set( 'place', place.id );
+	if ( vehicles.riding ) vehicles.exit(); // the vehicle stays parked where you left it
+	if ( remember ) {
+
+		ui.place.value = place.id;
+		store.set( 'place', place.id );
+
+	}
 
 	// Ground in downtown Charleston is ~26 m below the WGS84 ellipsoid (geoid offset).
 	const spot = toLocal( place.lat, place.lon, - 25 );
@@ -477,6 +510,13 @@ function nextPlace( dir = 1 ) {
 function toggleFlight() {
 
 	if ( awaitingGround ) return;
+	if ( vehicles.riding ) {
+
+		exitVehicle();
+		return;
+
+	}
+
 	flying = ! flying;
 	vy = 0;
 	ambience.whoosh( flying );
@@ -490,8 +530,212 @@ function toggleFlight() {
 
 function updateModeLabel() {
 
-	ui.hudMode.textContent = flying ? 'Flying' : 'On foot';
-	ui.hudMode.dataset.mode = flying ? 'fly' : 'walk';
+	const v = vehicles?.riding;
+	if ( v ) {
+
+		const s = Math.abs( v.speed );
+		ui.hudMode.textContent = v.kind === 'car' ? `Driving · ${ Math.round( s * 2.237 ) } mph`
+			: v.kind === 'carriage' ? `Carriage · ${ s < 0.1 ? 'halt' : s < 2.2 ? 'walk' : s < 4.5 ? 'trot' : 'canter' }`
+				: `Sailing · ${ ( s * 1.944 ).toFixed( 1 ) } kn${ v.inIrons ? ' · in irons' : '' }`;
+		ui.hudMode.dataset.mode = 'fly';
+
+	} else {
+
+		ui.hudMode.textContent = flying ? 'Flying' : 'On foot';
+		ui.hudMode.dataset.mode = flying ? 'fly' : 'walk';
+
+	}
+
+	ui.vehicleExit.textContent = v ? 'Get out (V)' : 'Get in (V)';
+
+}
+
+// ---------------------------------------------------------------- vehicles
+
+const headLocalEntry = new THREE.Vector3( 0, EYE, 0 );
+let seatYawOffset = 0;
+let pendingBoat = null;
+const _seat = new THREE.Vector3();
+const _off = new THREE.Vector3();
+const UPV = new THREE.Vector3( 0, 1, 0 );
+
+function feetPosition() {
+
+	readHead();
+	return new THREE.Vector3( head.x, rig.position.y, head.z );
+
+}
+
+function enterVehicle( v ) {
+
+	if ( ! v ) return;
+	flying = false;
+	awaitingGround = false;
+	ui.loading.hidden = true;
+	vy = 0;
+	rig.updateMatrixWorld( true );
+	if ( renderer.xr.isPresenting ) {
+
+		// keep your real head where it is relative to your body, and face forward
+		readHead();
+		headLocalEntry.copy( head );
+		rig.worldToLocal( headLocalEntry );
+		seatYawOffset = - ( headYaw() - rig.rotation.y );
+
+	} else {
+
+		headLocalEntry.set( 0, EYE, 0 );
+		yaw = 0; // in a vehicle, mouse look is relative to the vehicle
+		pitch = 0;
+
+	}
+
+	vehicles.enter( v );
+	placeInSeat();
+	updateModeLabel();
+
+}
+
+function placeInSeat() {
+
+	const v = vehicles.riding;
+	if ( ! v ) return;
+	vehicles.eyeWorld( v, _seat );
+	rig.rotation.y = v.yaw + ( renderer.xr.isPresenting ? seatYawOffset : yaw );
+	_off.copy( headLocalEntry ).applyAxisAngle( UPV, rig.rotation.y );
+	rig.position.copy( _seat ).sub( _off );
+	if ( ! renderer.xr.isPresenting ) camera.rotation.set( pitch, 0, 0 );
+
+}
+
+function exitVehicle() {
+
+	const v = vehicles.riding;
+	const out = vehicles.exit();
+	if ( ! out ) return;
+	readHead();
+	rig.position.x += out.x - head.x;
+	rig.position.z += out.z - head.z;
+	const g = castTerrain( out.x, out.z, Math.max( out.y, v.pos.y ) + 3, 30 );
+	rig.position.y = g ? g.point.y : out.y;
+	if ( ! renderer.xr.isPresenting ) {
+
+		yaw = rig.rotation.y;
+		pitch = 0;
+
+	}
+
+	if ( ! g ) {
+
+		awaitingGround = true;
+		quietFor = 0;
+		spawnedAt = performance.now();
+
+	}
+
+	if ( v.kind === 'boat' ) notify( 'Walking on water', 'You can walk back to the boat and get in again.' );
+	updateModeLabel();
+
+}
+
+function summon( kind ) {
+
+	if ( ! rootReady || awaitingGround ) return;
+	if ( vehicles.riding ) exitVehicle();
+	readHead();
+	let feet = new THREE.Vector3( head.x, rig.position.y, head.z );
+	if ( flying ) {
+
+		const g = castTerrain( head.x, head.z, head.y, 3000 );
+		if ( ! g ) return notify( 'No ground below', 'Fly lower and try again.' );
+		feet = g.point.clone();
+
+	}
+
+	const v = vehicles.summonGround( kind, feet, headYaw() );
+	if ( v ) setTimeout( () => {
+
+		if ( ! vehicles.riding ) enterVehicle( v );
+
+	}, 1100 );
+
+}
+
+function summonBoat() {
+
+	if ( ! rootReady ) return;
+	readHead();
+	let best = BOAT_SPOTS[ 0 ], bd = Infinity;
+	for ( const spot of BOAT_SPOTS ) {
+
+		const d = toLocal( spot.lat, spot.lon, - 25 ).distanceTo( head );
+		if ( d < bd ) {
+
+			bd = d;
+			best = spot;
+
+		}
+
+	}
+
+	pendingBoat = best;
+	goTo( best, false, false );
+	ui.hudPlace.textContent = best.name;
+
+}
+
+function launchBoat() {
+
+	const spot = pendingBoat;
+	pendingBoat = null;
+	readHead();
+	const pos = new THREE.Vector3( head.x, rig.position.y, head.z );
+	// the sea breeze here comes from the southwest
+	const a = toLocal( spot.lat, spot.lon, - 25 );
+	const n = toLocal( spot.lat + 0.001, spot.lon, - 25 ).sub( a ).setY( 0 ).normalize();
+	const e = new THREE.Vector3().crossVectors( n, UPV ).normalize();
+	const windFrom = n.clone().add( e ).negate().normalize();
+	const look = toLocal( spot.look.lat, spot.look.lon, - 25 );
+	const boatYaw = Math.atan2( - ( look.x - a.x ), - ( look.z - a.z ) );
+	const v = vehicles.place( 'boat', pos, boatYaw, { seaLevel: pos.y, windFrom } );
+	setTimeout( () => {
+
+		if ( ! vehicles.riding ) enterVehicle( v );
+
+	}, 1100 );
+
+}
+
+function enterNearest() {
+
+	if ( vehicles.riding ) return;
+	const v = vehicles.nearest( feetPosition(), 7 );
+	if ( v ) enterVehicle( v );
+	else notify( 'Nothing to get into', 'Summon a vehicle from the menu, or walk up to one you left.' );
+
+}
+
+function menuItems() {
+
+	const riding = vehicles.riding;
+	const near = ! riding && vehicles.nearest( feetPosition(), 7 );
+	return [
+		{ id: 'car', label: 'Summon a car' },
+		{ id: 'carriage', label: 'Summon a carriage' },
+		{ id: 'boat', label: 'Sail from the harbor' },
+		riding
+			? { id: 'exit', label: 'Get out', accent: true }
+			: { id: 'enter', label: near ? `Get in the ${ SPECS[ near.kind ].label.toLowerCase() }` : 'Get in', enabled: !! near, accent: !! near },
+	];
+
+}
+
+function menuSelect( id ) {
+
+	if ( id === 'car' || id === 'carriage' ) summon( id );
+	else if ( id === 'boat' ) summonBoat();
+	else if ( id === 'enter' ) enterNearest();
+	else if ( id === 'exit' ) exitVehicle();
 
 }
 
@@ -547,7 +791,8 @@ function stepPlayer( dt, forward, strafe, speed, vertical = 0 ) {
 			rig.position.y = g;
 			awaitingGround = false;
 			ui.loading.hidden = true;
-			if ( renderer.xr.isPresenting ) showToast( currentPlace().name, currentPlace().blurb );
+			if ( pendingBoat ) launchBoat();
+			else if ( renderer.xr.isPresenting ) showToast( currentPlace().name, currentPlace().blurb );
 
 		} else if ( g !== null && g > rig.position.y - 3 ) {
 
@@ -672,6 +917,10 @@ addEventListener( 'keydown', e => {
 	if ( e.code === 'KeyG' ) screenCast( 'ground' );
 	if ( e.code === 'KeyR' ) screenCast( 'raise' );
 	if ( e.code === 'KeyX' ) alchemy.clearAll();
+	if ( e.code === 'Digit1' ) summon( 'car' );
+	if ( e.code === 'Digit2' ) summon( 'carriage' );
+	if ( e.code === 'Digit3' ) summonBoat();
+	if ( e.code === 'KeyV' ) vehicles.riding ? exitVehicle() : enterNearest();
 	if ( e.code === 'Space' ) e.preventDefault();
 
 } );
@@ -715,6 +964,20 @@ canvas.addEventListener( 'pointermove', e => {
 
 function screenInput( dt ) {
 
+	if ( vehicles.riding ) {
+
+		alchemy.setScreenGlow( true );
+		ui.crosshair.hidden = ! alchemy.armed();
+		const k = c => keys.has( c );
+		return {
+			throttle: k( 'KeyW' ) || k( 'ArrowUp' ) ? 1 : 0,
+			brake: k( 'KeyS' ) || k( 'ArrowDown' ) ? 1 : 0,
+			steer: ( k( 'KeyD' ) || k( 'ArrowRight' ) ? 1 : 0 ) - ( k( 'KeyA' ) || k( 'ArrowLeft' ) ? 1 : 0 ),
+			handbrake: k( 'Space' ),
+		};
+
+	}
+
 	const f = ( keys.has( 'KeyW' ) || keys.has( 'ArrowUp' ) ? 1 : 0 ) - ( keys.has( 'KeyS' ) || keys.has( 'ArrowDown' ) ? 1 : 0 );
 	const s = ( keys.has( 'KeyD' ) ? 1 : 0 ) - ( keys.has( 'KeyA' ) ? 1 : 0 );
 	const v = ( keys.has( 'Space' ) || keys.has( 'KeyE' ) ? 1 : 0 ) - ( keys.has( 'KeyQ' ) ? 1 : 0 );
@@ -727,6 +990,7 @@ function screenInput( dt ) {
 	stepPlayer( dt, f, s, speed, v );
 	alchemy.setScreenGlow( true );
 	ui.crosshair.hidden = ! alchemy.armed();
+	return null;
 
 }
 
@@ -791,6 +1055,13 @@ function xrInput( dt, frame ) {
 	let rightPinch = false;
 	const palms = [ null, null ];
 	activeHaptics = [];
+	const riding = vehicles.riding;
+	const drive = { throttle: 0, brake: 0, steer: 0 };
+	let menuPalm = null;
+	let menuTip = null;
+	let menuRay = null;
+	let menuForce = false;
+	let trackedHands = 0;
 
 	for ( const source of session.inputSources ) {
 
@@ -799,6 +1070,7 @@ function xrInput( dt, frame ) {
 
 		if ( source.hand ) {
 
+			trackedHands ++;
 			const p = pinching( frame, source, ref );
 			pinchState[ side ] = p;
 			if ( side === 'left' ) leftPinch = p;
@@ -807,6 +1079,25 @@ function xrInput( dt, frame ) {
 			const palm = source.hand.get( 'middle-finger-metacarpal' );
 			const pose = palm && frame.getJointPose ? frame.getJointPose( palm, ref ) : null;
 			if ( pose && slot >= 0 ) palms[ slot ] = toWorld( pose.transform.position, new THREE.Vector3() );
+			if ( pose && side === 'left' ) {
+
+				// -Y of a hand joint points out of the palm
+				const o = pose.transform.orientation;
+				const normal = new THREE.Vector3( 0, - 1, 0 )
+					.applyQuaternion( new THREE.Quaternion( o.x, o.y, o.z, o.w ) )
+					.applyQuaternion( rig.quaternion );
+				menuPalm = { pos: palms[ 0 ], normal };
+
+			}
+
+			if ( side === 'right' ) {
+
+				const tipJoint = source.hand.get( 'index-finger-tip' );
+				const tp = tipJoint && frame.getJointPose ? frame.getJointPose( tipJoint, ref ) : null;
+				if ( tp ) menuTip = toWorld( tp.transform.position, new THREE.Vector3() );
+
+			}
+
 			continue;
 
 		}
@@ -826,21 +1117,49 @@ function xrInput( dt, frame ) {
 		const btn = i => !! ( gp.buttons[ i ] && gp.buttons[ i ].pressed );
 		const dead = v => ( Math.abs( v ) < 0.15 ? 0 : v );
 
+		const value = i => ( gp.buttons[ i ] ? gp.buttons[ i ].value : 0 );
+
 		if ( side === 'left' ) {
 
 			forward = - dead( ay );
 			strafe = dead( ax );
 			if ( btn( 3 ) ) fast = true; // click the stick to hurry
-			if ( edge( 'left-x', btn( 4 ) ) ) nextPlace( 1 );
+			if ( edge( 'left-x', btn( 4 ) ) && ! riding ) nextPlace( 1 );
 			if ( edge( 'left-y', btn( 5 ) ) ) toggleFlight();
+			drive.brake = value( 0 );
+			drive.steer = dead( ax );
+			if ( btn( 1 ) && palms[ 0 ] ) {
+
+				// hold the left grip to show the menu above this controller
+				menuForce = true;
+				menuPalm = { pos: palms[ 0 ], normal: new THREE.Vector3( 0, 1, 0 ) };
+
+			}
 
 		} else if ( side === 'right' ) {
+
+			drive.throttle = value( 0 );
+			if ( source.targetRaySpace ) {
+
+				const aim = frame.getPose( source.targetRaySpace, ref );
+				if ( aim ) {
+
+					const o = aim.transform.orientation;
+					const dir = new THREE.Vector3( 0, 0, - 1 )
+						.applyQuaternion( new THREE.Quaternion( o.x, o.y, o.z, o.w ) )
+						.applyQuaternion( rig.quaternion );
+					menuRay = { origin: toWorld( aim.transform.position, new THREE.Vector3() ), dir, pressed: edge( 'menu-trigger', btn( 0 ) ) };
+
+				}
+
+			}
+
 
 			if ( edge( 'snap-r', ax > 0.7 ) ) turnBy( - Math.PI / 6 );
 			if ( edge( 'snap-l', ax < - 0.7 ) ) turnBy( Math.PI / 6 );
 			if ( flying ) vertical = - dead( ay );
 			if ( btn( 3 ) ) fast = true;
-			if ( edge( 'right-a', btn( 4 ) ) ) nextPlace( 1 );
+			if ( edge( 'right-a', btn( 4 ) ) && ! riding ) nextPlace( 1 );
 			if ( edge( 'right-b', btn( 5 ) ) ) toggleFlight();
 
 			// trigger while charged: transmute where this controller points
@@ -859,6 +1178,30 @@ function xrInput( dt, frame ) {
 			}
 
 		}
+
+	}
+
+	// the palm-up menu (or left-grip menu with controllers)
+	wrist.setItems( menuItems() );
+	const menuOpen = wrist.update( dt, { head, palm: menuPalm, tip: menuTip, ray: menuForce ? menuRay : null, forceShow: menuForce } );
+
+	if ( riding ) {
+
+		// Hands: hold them like a wheel (or reins, or a tiller) and tilt to steer.
+		// Right pinch to go, left pinch to brake or back up.
+		const [ L, R ] = palms;
+		if ( L && R && trackedHands === 2 ) {
+
+			const flatDist = Math.hypot( L.x - R.x, L.z - R.z );
+			if ( flatDist > 0.15 ) drive.steer = THREE.MathUtils.clamp( Math.atan2( L.y - R.y, flatDist ) / 0.7, - 1, 1 );
+
+		}
+
+		if ( rightPinch ) drive.throttle = 1;
+		if ( leftPinch && ! menuOpen ) drive.brake = 1;
+		pinchState._leftWas = leftPinch;
+		alchemy.trackPalms( palms, head, headDir, dt );
+		return drive;
 
 	}
 
@@ -911,6 +1254,7 @@ function xrInput( dt, frame ) {
 
 	const speed = flying ? ( fast ? BOOST : FLY ) : ( fast ? RUN : WALK );
 	stepPlayer( dt, forward, strafe, speed, vertical );
+	return null;
 
 }
 
@@ -1116,6 +1460,19 @@ ui.enterScreen.addEventListener( 'click', () => {
 } );
 
 ui.hudMenu.addEventListener( 'click', openMenu );
+for ( const b of document.querySelectorAll( '[data-vehicle]' ) ) {
+
+	b.addEventListener( 'click', () => {
+
+		const act = b.dataset.vehicle;
+		if ( act === 'boat' ) summonBoat();
+		else if ( act === 'toggle' ) vehicles.riding ? exitVehicle() : enterNearest();
+		else summon( act );
+		b.blur();
+
+	} );
+
+}
 
 let xrSupported = false;
 
@@ -1231,6 +1588,7 @@ function statsLine() {
 }
 
 const clock = new THREE.Clock();
+let labelTimer = 0;
 let attrTimer = 0;
 
 renderer.setAnimationLoop( ( time, frame ) => {
@@ -1248,13 +1606,30 @@ renderer.setAnimationLoop( ( time, frame ) => {
 
 	if ( rootReady ) {
 
-		if ( inXR ) xrInput( dt, frame );
-		else if ( ! ui.menu.open ) screenInput( dt );
-		else {
+		let drive = null;
+		if ( inXR ) drive = xrInput( dt, frame );
+		else if ( ! ui.menu.open ) drive = screenInput( dt );
+		else if ( ! vehicles.riding ) {
 
 			rig.rotation.y = yaw;
 			camera.rotation.set( pitch, 0, 0 );
 			stepPlayer( dt, 0, 0, 0 );
+
+		}
+
+		vehicles.update( dt, drive );
+		if ( vehicles.riding ) {
+
+			placeInSeat();
+			speedNow = Math.abs( vehicles.riding.speed );
+
+		}
+
+		labelTimer -= dt;
+		if ( labelTimer <= 0 ) {
+
+			labelTimer = 0.25;
+			updateModeLabel();
 
 		}
 
@@ -1319,4 +1694,16 @@ checkXR();
 refreshButtons();
 
 // handy for testing from the browser console
-window.charleston = { alchemy, toggleFlight, nextPlace, rig, camera, notify, screenCast };
+// place the screen camera at x,y,z looking at tx,ty,tz (for screenshots and debugging)
+function setView( x, y, z, tx, ty, tz ) {
+
+	const dx = tx - x, dy = ty - y, dz = tz - z;
+	yaw = Math.atan2( - dx, - dz );
+	pitch = Math.atan2( dy, Math.hypot( dx, dz ) );
+	rig.position.set( x, y - EYE, z );
+	flying = true; // hold position instead of falling
+	awaitingGround = false;
+
+}
+
+window.charleston = { setView, wrist, menuItems, alchemy, vehicles, summon, summonBoat, enterVehicle, exitVehicle, toggleFlight, nextPlace, rig, camera, notify, screenCast, keys };

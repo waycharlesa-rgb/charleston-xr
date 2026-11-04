@@ -126,6 +126,16 @@
 	}
 	#hud-mode[data-mode="fly"] { background: var(--haint); color: var(--shutter); font-weight: 700; }
 
+	#vehicle-bar {
+		position: fixed;
+		left: max(16px, env(safe-area-inset-left, 0px));
+		bottom: max(12px, env(safe-area-inset-bottom, 0px));
+		display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 32px);
+		pointer-events: auto;
+	}
+	#vehicle-bar button { background: rgba(28,36,33,.78); padding: 6px 10px; font-size: 13px; }
+	kbd { font: inherit; font-size: 11px; color: var(--muted); border: 1px solid rgba(168,213,209,.35); border-radius: 3px; padding: 0 4px; margin-left: 2px; }
+
 	#hint {
 		position: fixed; left: 50%; transform: translateX(-50%);
 		bottom: max(44px, calc(env(safe-area-inset-bottom, 0px) + 36px));
@@ -231,11 +241,20 @@
 			<dt>Raise hands</dt><dd>A pillar lifts you 12 m up</dd>
 		</dl>
 		<p class="hint">Creations sink back into the street after a few minutes.</p>
+		<h3>Vehicles</h3>
+		<dl>
+			<dt>Menu</dt><dd>Turn your left palm up, then tap a row with your right index finger. With controllers, hold the left grip and point the right trigger at a row</dd>
+			<dt>Summon</dt><dd>A car or a carriage appears just ahead of you and you climb in. A sailboat takes you out to the nearest stretch of harbor</dd>
+			<dt>Steer</dt><dd>Hold your hands like a wheel and tilt them; right pinch to go, left pinch to brake or reverse</dd>
+			<dt>Sailing</dt><dd>The wind is from the southwest. Right pinch trims the sails in, left eases them. You can’t sail within about 40° of the wind</dd>
+			<dt>Get out</dt><dd>From the palm menu, or B / Y on controllers</dd>
+		</dl>
 		<h3>Controllers</h3>
 		<dl>
 			<dt>Left stick</dt><dd>Walk or fly; click either stick to hurry</dd>
 			<dt>Right stick</dt><dd>Flick left or right to turn 30°; up or down to climb while flying</dd>
-			<dt>B / Y</dt><dd>Take off or land</dd>
+			<dt>B / Y</dt><dd>Take off or land; in a vehicle, get out</dd>
+			<dt>Triggers</dt><dd>In a vehicle: right to go, left to brake; left stick to steer</dd>
 			<dt>A / X</dt><dd>Next landmark</dd>
 			<dt>Clap</dt><dd>Tap the controllers together, then push, touch the floor, raise them, or pull the right trigger to aim</dd>
 		</dl>
@@ -246,6 +265,8 @@
 			<dt>F</dt><dd>Take off or land; Space or E to climb, Q to descend</dd>
 			<dt>C</dt><dd>Clap, then click or T to push, G for spikes, R to rise</dd>
 			<dt>X</dt><dd>Sink everything you’ve made</dd>
+			<dt>1 / 2 / 3</dt><dd>Summon a car, a carriage or a sailboat</dd>
+			<dt>V</dt><dd>Get in or out; drive with W A S D, Space for the handbrake</dd>
 			<dt>N / B</dt><dd>Next or previous landmark</dd>
 			<dt>Esc</dt><dd>This menu</dd>
 		</dl>
@@ -255,6 +276,12 @@
 <div id="hud" hidden>
 	<div class="hud-left"><span id="hud-place"></span><span id="hud-mode" data-mode="walk">On foot</span></div>
 	<button id="hud-menu" type="button">Menu</button>
+	<div id="vehicle-bar" role="group" aria-label="Vehicles">
+		<button type="button" data-vehicle="car">Car <kbd>1</kbd></button>
+		<button type="button" data-vehicle="carriage">Carriage <kbd>2</kbd></button>
+		<button type="button" data-vehicle="boat">Boat <kbd>3</kbd></button>
+		<button type="button" data-vehicle="toggle" id="vehicle-toggle">Get in (V)</button>
+	</div>
 </div>
 <div id="loading" hidden>Loading the street…</div>
 <div id="hint" hidden aria-live="polite"></div>

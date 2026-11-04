@@ -222,6 +222,128 @@ export class HarborAmbience {
 
 	}
 
+	// ------------------------------------------------ vehicles
+
+	setEngine( on, load = 0, throttle = 0 ) {
+
+		const ctx = this.ctx;
+		if ( ! ctx ) return;
+		if ( ! this._engine ) {
+
+			const g = ctx.createGain();
+			g.gain.value = 0;
+			const lp = ctx.createBiquadFilter();
+			lp.type = 'lowpass';
+			lp.frequency.value = 400;
+			const a = ctx.createOscillator();
+			a.type = 'sawtooth';
+			const b = ctx.createOscillator();
+			b.type = 'square';
+			a.connect( lp );
+			b.connect( lp );
+			lp.connect( g ).connect( this.master );
+			a.start();
+			b.start();
+			this._engine = { g, lp, a, b };
+
+		}
+
+		const e = this._engine, t = ctx.currentTime;
+		const f = 34 + load * 120 + throttle * 12; // firing frequency rises with speed
+		e.a.frequency.setTargetAtTime( f, t, 0.08 );
+		e.b.frequency.setTargetAtTime( f * 0.5, t, 0.08 );
+		e.lp.frequency.setTargetAtTime( 250 + throttle * 700 + load * 500, t, 0.1 );
+		e.g.gain.setTargetAtTime( on ? 0.07 + throttle * 0.05 : 0, t, 0.15 );
+
+	}
+
+	hoof( speed = 1 ) {
+
+		this._burst( 0.08, ( src, out, t ) => {
+
+			const bp = this.ctx.createBiquadFilter();
+			bp.type = 'bandpass';
+			bp.frequency.value = 700 + Math.random() * 500;
+			bp.Q.value = 3;
+			out.gain.setValueAtTime( 0.35 + Math.min( 0.3, speed * 0.05 ), t );
+			out.gain.exponentialRampToValueAtTime( 0.001, t + 0.06 );
+			src.connect( bp ).connect( out );
+
+		} );
+
+	}
+
+	setWater( mps ) {
+
+		const ctx = this.ctx;
+		if ( ! ctx ) return;
+		if ( ! this._water ) {
+
+			const src = this._loop( this._noiseBuffer( 3 ), 1.4 );
+			const lp = ctx.createBiquadFilter();
+			lp.type = 'lowpass';
+			lp.frequency.value = 900;
+			const g = ctx.createGain();
+			g.gain.value = 0;
+			src.connect( lp ).connect( g ).connect( this.master );
+			this._water = { g, lp };
+
+		}
+
+		const k = Math.min( 1, mps / 6 );
+		this._water.g.gain.setTargetAtTime( k * 0.5, ctx.currentTime, 0.3 );
+		this._water.lp.frequency.setTargetAtTime( 500 + k * 1500, ctx.currentTime, 0.3 );
+
+	}
+
+	// sails flapping when you point too close to the wind
+	luff( on ) {
+
+		const ctx = this.ctx;
+		if ( ! ctx || on === !! this._luff ) return;
+		if ( on ) {
+
+			const src = this._loop( this._whiteNoise || ( this._whiteNoise = this._white( 2 ) ), 0.8 );
+			const bp = ctx.createBiquadFilter();
+			bp.type = 'bandpass';
+			bp.frequency.value = 350;
+			const g = ctx.createGain();
+			g.gain.value = 0;
+			const lfo = ctx.createOscillator();
+			lfo.frequency.value = 6.5;
+			const lg = ctx.createGain();
+			lg.gain.value = 0.12;
+			lfo.connect( lg ).connect( g.gain );
+			lfo.start();
+			src.connect( bp ).connect( g ).connect( this.master );
+			this._luff = { src, lfo, g };
+
+		} else {
+
+			const { src, lfo } = this._luff;
+			this._luff = null;
+			src.stop( ctx.currentTime + 0.1 );
+			lfo.stop( ctx.currentTime + 0.1 );
+
+		}
+
+	}
+
+	crash( strength = 0.5 ) {
+
+		this._burst( 0.5, ( src, out, t ) => {
+
+			const lp = this.ctx.createBiquadFilter();
+			lp.type = 'lowpass';
+			lp.frequency.value = 600;
+			out.gain.setValueAtTime( 0.4 + strength * 0.9, t );
+			out.gain.exponentialRampToValueAtTime( 0.001, t + 0.45 );
+			src.connect( lp ).connect( out );
+
+		} );
+
+	}
+
 	whoosh( up = true ) {
 
 		this._burst( 0.9, ( src, out, t ) => {
