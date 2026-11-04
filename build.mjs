@@ -17,6 +17,17 @@ await build( {
 } );
 
 cpSync( 'index.html', 'dist/index.html' );
+// streets and footpaths for traffic (© OpenStreetMap contributors, ODbL)
+try {
+
+	cpSync( 'data/osm-downtown.json', 'dist/osm-downtown.json' );
+
+} catch {
+
+	console.warn( 'No data/osm-downtown.json: the game will ask OpenStreetMap at runtime.' );
+
+}
+
 for ( const f of [ 'draco_decoder.js', 'draco_decoder.wasm', 'draco_wasm_wrapper.js' ] ) {
 
 	cpSync( `node_modules/three/examples/jsm/libs/draco/gltf/${ f }`, `dist/draco/${ f }` );

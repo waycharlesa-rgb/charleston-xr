@@ -10,6 +10,7 @@ A walkable, photorealistic downtown Charleston, SC for the Samsung Galaxy XR (or
 - Hand tracking, controllers, or keyboard and mouse
 - **Flying**: two quick left-hand pinches (or B/Y, or F) to take off, then fly where you look. A comfort vignette dims the edges of your view at speed
 - **Vehicles**: turn your left palm up for a menu, then summon a car or a horse-drawn carriage (it rises out of the street through a transmutation circle and you climb in), or sail a boat from the nearest stretch of harbor. Steer by holding your hands like a wheel and tilting them; right pinch to go, left to brake. The boat sails by real wind rules: the breeze is from the southwest and you can't point within about 40° of it
+- **Traffic and pedestrians**: cars drive downtown's real street network, keeping right, obeying one-way streets, taking turns at junctions and stopping for crosswalks, for you and for stone in the road (and honking if you stand there). People walk the mapped sidewalks and crosswalks, step around you and jump clear of anything you drive at them. Turn it off under **Traffic and pedestrians** in the menu
 - **Alchemy**: clap to charge your hands, then touch the ground for a wave of stone spikes, push forward to burst stone from the ground or a wall you're looking at, or raise both hands to ride a pillar 12 m up. The pavement ripples, blue arcs crackle, and the stone takes the colour of the surface it came from. Creations sink back after a few minutes
 - Late-afternoon sky with haze, and synthesized harbor sound (waves, breeze, gulls)
 - Google attribution on screen and in the headset
@@ -41,7 +42,14 @@ Open the page and paste a Google Maps Platform key that has the **Map Tiles API*
 | `src/places.js` | Landmark coordinates. Adjust these if a spot lands you on a roof |
 | `src/vehicles.js` | Car, carriage and sailboat: models, driving, sailing |
 | `src/wristmenu.js` | The palm-up menu |
+| `src/traffic.js` | Traffic cars and pedestrians on the street network |
+| `src/osm.js`, `scripts/fetch-osm.mjs` | Downloads streets and footpaths from OpenStreetMap |
+| `data/osm-downtown.json` | The downloaded street network, refreshed by the **Fetch OpenStreetMap data** workflow |
 | `src/alchemy.js` | Clap detection, transmutations, arcs, ripple and stone |
 | `src/audio.js` | Procedural harbor ambience and sound effects |
 | `index.html` | Start menu and on-screen display |
 | `build.mjs` | Bundles everything into `dist/` |
+
+## Map data
+
+Street and footpath data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, available under the Open Database License. To refresh it, run the **Fetch OpenStreetMap data** workflow from the repository's Actions tab.

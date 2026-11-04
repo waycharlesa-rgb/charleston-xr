@@ -15,6 +15,7 @@ import { HarborAmbience } from './audio.js';
 import { createAlchemy } from './alchemy.js';
 import { createVehicles, SPECS } from './vehicles.js';
 import { createWristMenu } from './wristmenu.js';
+import { createTraffic } from './traffic.js';
 
 const D2R = Math.PI / 180;
 const WALK = 1.4; // m/s, an easy stroll
@@ -93,6 +94,7 @@ const ui = {
 	crosshair: $( 'crosshair' ),
 	attribution: $( 'attribution' ),
 	stats: $( 'show-stats' ),
+	traffic: $( 'show-traffic' ),
 	loading: $( 'loading' ),
 };
 
@@ -109,6 +111,13 @@ ui.place.value = store.get( 'place', 'battery' );
 ui.quality.value = store.get( 'quality', 'balanced' );
 ui.stats.checked = store.get( 'stats' ) === '1';
 ui.stats.addEventListener( 'change', () => store.set( 'stats', ui.stats.checked ? '1' : '0' ) );
+ui.traffic.checked = store.get( 'traffic', '1' ) === '1';
+ui.traffic.addEventListener( 'change', () => {
+
+	store.set( 'traffic', ui.traffic.checked ? '1' : '0' );
+	traffic.setEnabled( ui.traffic.checked );
+
+} );
 
 // ---------------------------------------------------------------- scene
 
@@ -212,6 +221,7 @@ function startTiles( apiKey ) {
 		requestAnimationFrame( () => {
 
 			rootReady = true;
+			startTraffic();
 			ui.keyState.textContent = 'Key works. The city is streaming in.';
 			ui.keyState.dataset.state = 'ok';
 			goTo( currentPlace(), true );
@@ -282,6 +292,7 @@ function startTestGround() {
 
 	scene.add( testGround );
 	rootReady = true;
+	startTraffic();
 	ui.keyState.textContent = 'Test mode: a paved square instead of Charleston.';
 	ui.keyState.dataset.state = 'ok';
 	goTo( currentPlace(), true );
@@ -303,9 +314,9 @@ function toLocal( lat, lon, height, target = new THREE.Vector3() ) {
 
 		// test mode: flat-earth metres around the origin
 		return target.set(
-			( lon - ORIGIN.lon ) * Math.cos( ORIGIN.lat * D2R ) * 111320 * 0.05,
+			( lon - ORIGIN.lon ) * Math.cos( ORIGIN.lat * D2R ) * 111320,
 			0,
-			- ( lat - ORIGIN.lat ) * 110540 * 0.05,
+			- ( lat - ORIGIN.lat ) * 110540,
 		);
 
 	}
@@ -409,7 +420,30 @@ const alchemy = createAlchemy( {
 
 const vehicles = createVehicles( {
 	scene, castRay, castTerrain, audio: ambience, notify, haptics, flourish: alchemy.flourish,
+	castExtra: ( o, d, f ) => traffic.castCars( o, d, f ),
 } );
+
+const playerInfo = { feet: new THREE.Vector3(), dir: new THREE.Vector3(), riding: null, vehicles: [] };
+const traffic = createTraffic( {
+	scene, toLocal, castTerrain, obstacleSolids: alchemy.solids, audio: ambience,
+	getPlayer() {
+
+		readHead();
+		playerInfo.feet.set( head.x, rig.position.y, head.z );
+		playerInfo.dir.set( headDir.x, 0, headDir.z ).normalize();
+		playerInfo.riding = vehicles.riding;
+		playerInfo.vehicles = vehicles.list;
+		return playerInfo;
+
+	},
+} );
+
+function startTraffic() {
+
+	traffic.setEnabled( ui.traffic.checked );
+	traffic.start().catch( err => console.warn( 'Traffic could not load the street map:', err ) );
+
+}
 
 const wrist = createWristMenu( { scene, haptics, audio: ambience, onSelect: menuSelect } );
 
@@ -1583,7 +1617,8 @@ function statsLine() {
 	if ( ! ui.stats.checked ) return '';
 	const st = tiles?.stats;
 	const loading = st ? st.queued + st.downloading + st.parsing : 0;
-	return `${ fps } fps · ${ loading } loading · ${ st ? st.visible : 0 } tiles shown · `;
+	const tr = traffic.stats;
+	return `${ fps } fps · ${ loading } loading · ${ st ? st.visible : 0 } tiles · ${ tr.cars } cars · ${ tr.people } people · `;
 
 }
 
@@ -1618,6 +1653,8 @@ renderer.setAnimationLoop( ( time, frame ) => {
 		}
 
 		vehicles.update( dt, drive );
+		traffic.update( dt );
+		ambience.setListener( head, headDir );
 		if ( vehicles.riding ) {
 
 			placeInSeat();
@@ -1653,7 +1690,7 @@ renderer.setAnimationLoop( ( time, frame ) => {
 				.filter( a => a.type === 'string' && a.value )
 				.map( a => a.value )
 				.join( ' · ' );
-			const line = statsLine() + 'Google' + ( text ? ' · ' + text : '' );
+			const line = statsLine() + 'Google' + ( text ? ' · ' + text : '' ) + ( traffic.ready ? ' · Streets © OpenStreetMap contributors' : '' );
 			ui.attribution.textContent = line;
 			drawCredit( line );
 
@@ -1706,4 +1743,4 @@ function setView( x, y, z, tx, ty, tz ) {
 
 }
 
-window.charleston = { setView, wrist, menuItems, alchemy, vehicles, summon, summonBoat, enterVehicle, exitVehicle, toggleFlight, nextPlace, rig, camera, notify, screenCast, keys };
+window.charleston = { setView, wrist, menuItems, alchemy, vehicles, traffic, summon, summonBoat, enterVehicle, exitVehicle, toggleFlight, nextPlace, rig, camera, notify, screenCast, keys };

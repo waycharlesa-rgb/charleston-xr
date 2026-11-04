@@ -148,7 +148,7 @@ function wheel( radius, width, tireMat, rimMat, spokes = 0, spokeMat = rimMat ) 
 const PAINTS = [ 0x1f3b33, 0x7fb6b3, 0xb5523f, 0xe9dfc8, 0x1b1d22, 0x6b1f2a ];
 let paintIndex = 0;
 
-function buildCar() {
+export function buildCar() {
 
 	const root = new THREE.Group();
 	const body = new THREE.Group();
@@ -672,7 +672,7 @@ function buildBoat() {
 
 // ---------------------------------------------------------------- the system
 
-export function createVehicles( { scene, castRay, castTerrain, audio, notify, flourish, haptics } ) {
+export function createVehicles( { scene, castRay, castTerrain, castExtra, audio, notify, flourish, haptics } ) {
 
 	const group = new THREE.Group();
 	group.name = 'vehicles';
@@ -759,7 +759,7 @@ export function createVehicles( { scene, castRay, castTerrain, audio, notify, fl
 			for ( const h of [ 0.45, 1.0 ] ) {
 
 				localToWorld( v, _v.set( x, h, endZ + ( v.speed >= 0 ? 0.3 : - 0.3 ) ), _w );
-				const hit = castRay( _w, dir, dist + 0.3 );
+				const hit = castRay( _w, dir, dist + 0.3 ) || castExtra?.( _w, dir, dist + 0.3 );
 				if ( hit ) return hit;
 
 			}
@@ -805,6 +805,7 @@ export function createVehicles( { scene, castRay, castTerrain, audio, notify, fl
 
 				const impact = Math.abs( v.speed );
 				v.speed = - v.speed * 0.2;
+				if ( impact > 1 ) hit.onImpact?.( impact );
 				if ( impact > 2 ) {
 
 					audio?.crash( Math.min( 1, impact / 15 ) );

@@ -344,6 +344,49 @@ export class HarborAmbience {
 
 	}
 
+	// where your ears are, so sounds from the street can be placed around you
+	setListener( pos, dir ) {
+
+		this._ear = { x: pos.x, y: pos.y, z: pos.z, fx: dir.x, fz: dir.z };
+
+	}
+
+	honk( x, y, z ) {
+
+		const ctx = this.ctx;
+		if ( ! ctx ) return;
+		const e = this._ear || { x, y, z, fx: 0, fz: - 1 };
+		const rx = x - e.x, rz = z - e.z;
+		const d = Math.hypot( rx, rz, y - e.y ) || 1;
+		const vol = 0.22 / ( 1 + d / 12 );
+		if ( vol < 0.01 ) return;
+		const fl = Math.hypot( e.fx, e.fz ) || 1;
+		const pan = Math.max( - 1, Math.min( 1, ( rx * - e.fz / fl + rz * e.fx / fl ) / d ) );
+		const t = ctx.currentTime;
+		const out = ctx.createGain();
+		const panner = ctx.createStereoPanner();
+		panner.pan.value = pan;
+		const lp = ctx.createBiquadFilter();
+		lp.type = 'lowpass';
+		lp.frequency.value = 2200 - Math.min( 1500, d * 15 );
+		out.gain.setValueAtTime( 0, t );
+		out.gain.linearRampToValueAtTime( vol, t + 0.02 );
+		out.gain.setValueAtTime( vol, t + 0.32 );
+		out.gain.linearRampToValueAtTime( 0, t + 0.38 );
+		lp.connect( out ).connect( panner ).connect( this.master );
+		for ( const f of [ 415, 523 ] ) {
+
+			const o = ctx.createOscillator();
+			o.type = 'square';
+			o.frequency.value = f;
+			o.connect( lp );
+			o.start( t );
+			o.stop( t + 0.4 );
+
+		}
+
+	}
+
 	whoosh( up = true ) {
 
 		this._burst( 0.9, ( src, out, t ) => {
