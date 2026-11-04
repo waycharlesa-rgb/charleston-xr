@@ -7,9 +7,9 @@ import {
 	GLTFExtensionsPlugin,
 	ReorientationPlugin,
 	TilesFadePlugin,
-	TileCompressionPlugin,
 	UnloadTilesPlugin,
 } from '3d-tiles-renderer/three/plugins';
+import { computeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { PLACES, ORIGIN } from './places.js';
 import { HarborAmbience } from './audio.js';
 import { createAlchemy } from './alchemy.js';
@@ -24,6 +24,17 @@ const EYE = 1.7; // eye height in screen mode
 const STEP_UP = 0.55; // tallest curb or stair you can step onto
 const BODY = 0.35; // how close you can get to a wall
 const QUALITY = { sharp: 8, balanced: 14, fast: 24 };
+
+// Collision checks against the city use a BVH (a spatial index over each tile's
+// triangles), built the first time a ray actually touches that tile. Without it,
+// every ray tests every triangle and the headset's frame rate collapses.
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+function lazyBVHRaycast( raycaster, intersects ) {
+
+	if ( ! this.geometry.boundsTree ) this.geometry.computeBoundsTree( { indirect: true } );
+	return acceleratedRaycast.call( this, raycaster, intersects );
+
+}
 
 // ?offline swaps the city for a test ground, so everything except the
 // photographed tiles can be tried without an API key.
@@ -78,6 +89,7 @@ const ui = {
 	hint: $( 'hint' ),
 	crosshair: $( 'crosshair' ),
 	attribution: $( 'attribution' ),
+	stats: $( 'show-stats' ),
 	loading: $( 'loading' ),
 };
 
@@ -92,6 +104,8 @@ for ( const p of PLACES ) {
 
 ui.place.value = store.get( 'place', 'battery' );
 ui.quality.value = store.get( 'quality', 'balanced' );
+ui.stats.checked = store.get( 'stats' ) === '1';
+ui.stats.addEventListener( 'change', () => store.set( 'stats', ui.stats.checked ? '1' : '0' ) );
 
 // ---------------------------------------------------------------- scene
 
@@ -102,6 +116,10 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.55;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType( 'local-floor' );
+// three.js defaults to maximum foveation, which visibly blurs everything outside
+// the centre of your view. Keep a little for performance.
+renderer.xr.setFoveation( 0.2 );
+const MAX_ANISO = renderer.capabilities.getMaxAnisotropy();
 $( 'stage' ).append( renderer.domElement );
 
 const scene = new THREE.Scene();
@@ -147,7 +165,6 @@ function startTiles( apiKey ) {
 	tiles = new TilesRenderer();
 	tiles.registerPlugin( new GoogleCloudAuthPlugin( { apiToken: apiKey, autoRefreshToken: true } ) );
 	tiles.registerPlugin( new GLTFExtensionsPlugin( { dracoLoader: draco } ) );
-	tiles.registerPlugin( new TileCompressionPlugin() );
 	tiles.registerPlugin( new TilesFadePlugin() );
 	tiles.registerPlugin( new UnloadTilesPlugin() );
 	tiles.registerPlugin( new ReorientationPlugin( {
@@ -165,8 +182,11 @@ function startTiles( apiKey ) {
 
 		model.traverse( o => {
 
+			if ( o.isMesh ) o.raycast = lazyBVHRaycast;
 			if ( ! o.material ) return;
 			o.material.toneMapped = false; // keep the photographed colours exactly as captured
+			// Sharp textures on surfaces seen at a slant: the street ahead, facades beside you.
+			if ( o.material.map ) o.material.map.anisotropy = MAX_ANISO;
 			alchemy.patchMaterial( o.material ); // let transmutations ripple the pavement
 
 		} );
@@ -257,9 +277,7 @@ function startTestGround() {
 function applyQuality() {
 
 	if ( ! tiles ) return;
-	const base = QUALITY[ ui.quality.value ] ?? QUALITY.balanced;
-	// In the headset each eye already renders at high resolution, so ease off a little.
-	tiles.errorTarget = renderer.xr.isPresenting ? base * 1.25 : base;
+	tiles.errorTarget = QUALITY[ ui.quality.value ] ?? QUALITY.balanced;
 
 }
 
@@ -384,6 +402,7 @@ let pitch = 0;
 let vy = 0;
 let awaitingGround = true;
 let spawnedAt = 0;
+let quietFor = 0;
 let flying = false;
 let speedNow = 0;
 let turnFlash = 0;
@@ -438,12 +457,13 @@ function goTo( place, initial = false ) {
 	vy = 0;
 	flying = false;
 	awaitingGround = true;
+	quietFor = 0;
 	spawnedAt = performance.now();
 	updateModeLabel();
 
 	ui.hudPlace.textContent = place.name;
-	showToast( place.name, place.blurb );
-	if ( ! initial ) ui.loading.hidden = false;
+	showToast( 'Loading ' + place.name + '…', 'The street sharpens as Google’s scans stream in.' );
+	ui.loading.hidden = false;
 
 }
 
@@ -517,13 +537,21 @@ function stepPlayer( dt, forward, strafe, speed, vertical = 0 ) {
 	// Waiting to land: probe from high above until the ground under us has loaded.
 	if ( awaitingGround ) {
 
+		// Only land once the detailed tiles around us are in; landing on the rough
+		// first-pass shape of the city can leave you inside a blob or on a roof.
+		const busy = tiles ? tiles.stats.queued + tiles.stats.downloading + tiles.stats.parsing : 0;
+		quietFor = busy === 0 ? quietFor + dt : 0;
 		const g = groundBelow( head.x, head.z, rig.position.y + 400, 800 );
-		const settled = ! tiles || tiles.stats.downloading + tiles.stats.parsing < 4;
-		if ( g !== null && ( settled || performance.now() - spawnedAt > 6000 ) ) {
+		if ( g !== null && ( quietFor > 0.6 || performance.now() - spawnedAt > 15000 ) ) {
 
 			rig.position.y = g;
 			awaitingGround = false;
 			ui.loading.hidden = true;
+			if ( renderer.xr.isPresenting ) showToast( currentPlace().name, currentPlace().blurb );
+
+		} else if ( g !== null && g > rig.position.y - 3 ) {
+
+			rig.position.y = g; // hover at the current best guess of street level while waiting
 
 		}
 
@@ -553,7 +581,8 @@ function stepPlayer( dt, forward, strafe, speed, vertical = 0 ) {
 	const nx = head.x + move.x;
 	const nz = head.z + move.z;
 	const above = rig.position.y + 1.6;
-	const g = groundBelow( nx, nz, above, 3000 );
+	let g = groundBelow( nx, nz, above, 60 );
+	if ( g === null ) g = groundBelow( nx, nz, above, 3000 ); // a long drop, e.g. after flying
 
 	// Nothing loaded under the next step yet: hold still rather than walk into a void.
 	if ( g === null ) {
@@ -1176,6 +1205,31 @@ addEventListener( 'resize', () => {
 
 // ---------------------------------------------------------------- loop
 
+// Pixels per eye, so the tiles load the detail each eye can actually show.
+function xrEyeResolution() {
+
+	const layer = renderer.xr.getBaseLayer?.();
+	let w = layer?.textureWidth || layer?.framebufferWidth || 0;
+	let h = layer?.textureHeight || layer?.framebufferHeight || 0;
+	if ( ! w || ! h ) return [ 1800, 1900 ];
+	if ( w > h * 1.5 ) w /= 2; // both eyes side by side in one image
+	return [ w, h ];
+
+}
+
+// Optional readout to help diagnose performance in the headset.
+let fpsFrames = 0;
+let fpsLast = 0;
+let fps = 0;
+function statsLine() {
+
+	if ( ! ui.stats.checked ) return '';
+	const st = tiles?.stats;
+	const loading = st ? st.queued + st.downloading + st.parsing : 0;
+	return `${ fps } fps · ${ loading } loading · ${ st ? st.visible : 0 } tiles shown · `;
+
+}
+
 const clock = new THREE.Clock();
 let attrTimer = 0;
 
@@ -1183,6 +1237,14 @@ renderer.setAnimationLoop( ( time, frame ) => {
 
 	const dt = Math.min( clock.getDelta(), 0.1 );
 	const inXR = renderer.xr.isPresenting;
+	fpsFrames ++;
+	if ( time - fpsLast > 1000 ) {
+
+		fps = Math.round( fpsFrames * 1000 / ( time - fpsLast ) );
+		fpsFrames = 0;
+		fpsLast = time;
+
+	}
 
 	if ( rootReady ) {
 
@@ -1204,19 +1266,19 @@ renderer.setAnimationLoop( ( time, frame ) => {
 	if ( tiles ) {
 
 		camera.updateMatrixWorld();
-		if ( inXR ) tiles.setResolution( camera, 1800, 1900 );
+		if ( inXR ) tiles.setResolution( camera, ...xrEyeResolution() );
 		else tiles.setResolutionFromRenderer( camera, renderer );
 		tiles.update();
 
 		attrTimer -= dt;
 		if ( attrTimer <= 0 ) {
 
-			attrTimer = 1;
+			attrTimer = 0.5;
 			const text = tiles.getAttributions()
 				.filter( a => a.type === 'string' && a.value )
 				.map( a => a.value )
 				.join( ' · ' );
-			const line = 'Google' + ( text ? ' · ' + text : '' );
+			const line = statsLine() + 'Google' + ( text ? ' · ' + text : '' );
 			ui.attribution.textContent = line;
 			drawCredit( line );
 
@@ -1231,6 +1293,7 @@ renderer.setAnimationLoop( ( time, frame ) => {
 		const want = Math.max( THREE.MathUtils.clamp( ( speedNow - 3 ) / 20, 0, 0.85 ), turnFlash > 0 ? 0.6 : 0 );
 		vignetteLevel += ( want - vignetteLevel ) * Math.min( 1, dt * 6 );
 		vignette.material.uniforms.uStrength.value = vignetteLevel;
+		vignette.visible = vignetteLevel > 0.01;
 
 	}
 

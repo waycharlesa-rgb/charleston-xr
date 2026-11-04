@@ -65,6 +65,8 @@
 
 	fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
 	label, legend { font-weight: 700; font-size: 14px; padding: 0; }
+	.check { display: flex; align-items: center; gap: 8px; font-weight: 400; color: var(--muted); }
+	.check input { width: 18px; height: 18px; accent-color: var(--haint); }
 	.hint { font-size: 13px; color: var(--muted); margin: 0; }
 	.hint a { color: var(--haint); }
 	.row { display: flex; gap: 8px; }
@@ -201,6 +203,7 @@
 			<option value="balanced">Balanced</option>
 			<option value="fast">Fast</option>
 		</select>
+		<label class="check"><input type="checkbox" id="show-stats"> Show performance (frame rate and loading)</label>
 	</fieldset>
 
 	<div class="actions">
