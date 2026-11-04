@@ -12,14 +12,22 @@ import {
 } from '3d-tiles-renderer/three/plugins';
 import { PLACES, ORIGIN } from './places.js';
 import { HarborAmbience } from './audio.js';
+import { createAlchemy } from './alchemy.js';
 
 const D2R = Math.PI / 180;
 const WALK = 1.4; // m/s, an easy stroll
 const RUN = 4.0;
+const FLY = 7; // m/s, gliding
+const BOOST = 35; // m/s, crossing the peninsula in under a minute
+const MAX_ALTITUDE = 1500;
 const EYE = 1.7; // eye height in screen mode
 const STEP_UP = 0.55; // tallest curb or stair you can step onto
 const BODY = 0.35; // how close you can get to a wall
 const QUALITY = { sharp: 8, balanced: 14, fast: 24 };
+
+// ?offline swaps the city for a test ground, so everything except the
+// photographed tiles can be tried without an API key.
+const OFFLINE = new URLSearchParams( location.search ).has( 'offline' );
 
 // ---------------------------------------------------------------- storage
 
@@ -65,7 +73,10 @@ const ui = {
 	status: $( 'status' ),
 	hud: $( 'hud' ),
 	hudPlace: $( 'hud-place' ),
+	hudMode: $( 'hud-mode' ),
 	hudMenu: $( 'hud-menu' ),
+	hint: $( 'hint' ),
+	crosshair: $( 'crosshair' ),
 	attribution: $( 'attribution' ),
 	loading: $( 'loading' ),
 };
@@ -114,10 +125,13 @@ su.mieDirectionalG.value = 0.82;
 su.sunPosition.value.setFromSphericalCoords( 1, ( 90 - 28 ) * D2R, 245 * D2R );
 scene.add( sky );
 
+const ambience = new HarborAmbience();
+
 // ---------------------------------------------------------------- city tiles
 
 let tiles = null;
 let rootReady = false;
+let testGround = null;
 const draco = new DRACOLoader().setDecoderPath( './draco/' );
 
 function startTiles( apiKey ) {
@@ -149,10 +163,11 @@ function startTiles( apiKey ) {
 
 	tiles.addEventListener( 'load-model', ( { scene: model } ) => {
 
-		// Keep the photographed colours exactly as captured.
 		model.traverse( o => {
 
-			if ( o.material ) o.material.toneMapped = false;
+			if ( ! o.material ) return;
+			o.material.toneMapped = false; // keep the photographed colours exactly as captured
+			alchemy.patchMaterial( o.material ); // let transmutations ripple the pavement
 
 		} );
 
@@ -188,6 +203,57 @@ function startTiles( apiKey ) {
 
 }
 
+function startTestGround() {
+
+	// A paved square with a few blocks to land on and transmute out of.
+	const c = document.createElement( 'canvas' );
+	c.width = c.height = 256;
+	const g = c.getContext( '2d' );
+	g.fillStyle = '#8d8a83';
+	g.fillRect( 0, 0, 256, 256 );
+	g.strokeStyle = '#6f6c66';
+	g.lineWidth = 3;
+	for ( let i = 0; i <= 256; i += 64 ) {
+
+		g.beginPath(); g.moveTo( i, 0 ); g.lineTo( i, 256 ); g.stroke();
+		g.beginPath(); g.moveTo( 0, i ); g.lineTo( 256, i ); g.stroke();
+
+	}
+
+	const tex = new THREE.CanvasTexture( c );
+	tex.colorSpace = THREE.SRGBColorSpace;
+	tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+	tex.repeat.set( 800, 800 );
+	const geo = new THREE.PlaneGeometry( 4000, 4000, 400, 400 ).rotateX( - Math.PI / 2 );
+	const mat = new THREE.MeshBasicMaterial( { map: tex, toneMapped: false } );
+	alchemy.patchMaterial( mat );
+	testGround = new THREE.Group();
+	testGround.add( new THREE.Mesh( geo, mat ) );
+
+	const palette = [ '#e7b9a3', '#f2e2a6', '#a8d5d1', '#d9c2e0', '#f3efe6' ];
+	for ( let i = 0; i < 14; i ++ ) {
+
+		const h = 8 + ( i * 7 ) % 14;
+		const box = new THREE.Mesh(
+			new THREE.BoxGeometry( 9, h, 12 ),
+			new THREE.MeshBasicMaterial( { color: palette[ i % palette.length ], toneMapped: false } ),
+		);
+		const a = i / 14 * Math.PI * 2;
+		box.position.set( Math.cos( a ) * 40, h / 2, Math.sin( a ) * 40 );
+		box.lookAt( 0, h / 2, 0 );
+		alchemy.patchMaterial( box.material );
+		testGround.add( box );
+
+	}
+
+	scene.add( testGround );
+	rootReady = true;
+	ui.keyState.textContent = 'Test mode: a paved square instead of Charleston.';
+	ui.keyState.dataset.state = 'ok';
+	goTo( currentPlace(), true );
+
+}
+
 function applyQuality() {
 
 	if ( ! tiles ) return;
@@ -199,9 +265,18 @@ function applyQuality() {
 
 // ---------------------------------------------------------------- geo helpers
 
-const _v = new THREE.Vector3();
-
 function toLocal( lat, lon, height, target = new THREE.Vector3() ) {
+
+	if ( ! tiles ) {
+
+		// test mode: flat-earth metres around the origin
+		return target.set(
+			( lon - ORIGIN.lon ) * Math.cos( ORIGIN.lat * D2R ) * 111320 * 0.05,
+			0,
+			- ( lat - ORIGIN.lat ) * 110540 * 0.05,
+		);
+
+	}
 
 	tiles.group.updateMatrixWorld( true );
 	tiles.ellipsoid.getCartographicToPosition( lat * D2R, lon * D2R, height, target );
@@ -215,6 +290,91 @@ function currentPlace() {
 
 }
 
+// ---------------------------------------------------------------- raycasting
+
+const ray = new THREE.Raycaster();
+ray.firstHitOnly = true;
+const hits = [];
+const _m = new THREE.Matrix3();
+const DOWN = new THREE.Vector3( 0, - 1, 0 );
+
+// Everything solid: the city (or test ground) plus whatever you've transmuted.
+function castRay( origin, dir, far ) {
+
+	ray.set( origin, dir );
+	ray.near = 0;
+	ray.far = far;
+	hits.length = 0;
+	if ( tiles ) tiles.raycast( ray, hits );
+	if ( testGround ) ray.intersectObject( testGround, true, hits );
+	if ( alchemy ) ray.intersectObject( alchemy.solids, true, hits );
+	if ( ! hits.length ) return null;
+	hits.sort( ( a, b ) => a.distance - b.distance );
+	return hits[ 0 ];
+
+}
+
+function castTerrain( x, z, fromY, far ) {
+
+	return castRay( new THREE.Vector3( x, fromY, z ), DOWN, far );
+
+}
+
+function hitNormal( hit, target ) {
+
+	if ( ! hit.face ) return target.set( 0, 0, 0 );
+	_m.getNormalMatrix( hit.object.matrixWorld );
+	return target.copy( hit.face.normal ).applyMatrix3( _m ).normalize();
+
+}
+
+function groundBelow( x, z, fromY, far ) {
+
+	const hit = castTerrain( x, z, fromY, far );
+	return hit ? hit.point.y : null;
+
+}
+
+// ---------------------------------------------------------------- notices
+
+let toastUntil = 0;
+let hintTimer = 0;
+
+function notify( title, sub = '' ) {
+
+	showToast( title, sub );
+	ui.hint.innerHTML = '';
+	const b = document.createElement( 'strong' );
+	b.textContent = title;
+	ui.hint.append( b );
+	if ( sub ) ui.hint.append( document.createTextNode( ' ' + sub ) );
+	ui.hint.hidden = false;
+	clearTimeout( hintTimer );
+	hintTimer = setTimeout( () => ui.hint.hidden = true, 4000 );
+
+}
+
+// ---------------------------------------------------------------- alchemy
+
+let activeHaptics = [];
+function haptics( intensity, ms ) {
+
+	for ( const h of activeHaptics ) {
+
+		try {
+
+			h.pulse( intensity, ms );
+
+		} catch { /* not every controller supports rumble */ }
+
+	}
+
+}
+
+const alchemy = createAlchemy( {
+	scene, camera, rig, castRay, castTerrain, audio: ambience, notify, haptics,
+} );
+
 // ---------------------------------------------------------------- player pose
 
 const head = new THREE.Vector3();
@@ -224,6 +384,9 @@ let pitch = 0;
 let vy = 0;
 let awaitingGround = true;
 let spawnedAt = 0;
+let flying = false;
+let speedNow = 0;
+let turnFlash = 0;
 
 function readHead() {
 
@@ -250,6 +413,7 @@ function turnBy( angle ) {
 	readHead();
 	rig.position.x += before.x - head.x;
 	rig.position.z += before.z - head.z;
+	turnFlash = 0.15;
 
 }
 
@@ -270,10 +434,12 @@ function goTo( place, initial = false ) {
 	rig.position.z += spot.z - head.z;
 	rig.position.y = spot.y;
 	pitch = 0;
-	camera.rotation.x = renderer.xr.isPresenting ? camera.rotation.x : 0;
+	if ( ! renderer.xr.isPresenting ) camera.rotation.x = 0;
 	vy = 0;
+	flying = false;
 	awaitingGround = true;
 	spawnedAt = performance.now();
+	updateModeLabel();
 
 	ui.hudPlace.textContent = place.name;
 	showToast( place.name, place.blurb );
@@ -288,50 +454,63 @@ function nextPlace( dir = 1 ) {
 
 }
 
-// ---------------------------------------------------------------- physics
+function toggleFlight() {
 
-const ray = new THREE.Raycaster();
-ray.firstHitOnly = true;
-const hits = [];
+	if ( awaitingGround ) return;
+	flying = ! flying;
+	vy = 0;
+	ambience.whoosh( flying );
+	haptics( 0.4, 60 );
+	updateModeLabel();
+	notify( flying ? 'Flying' : 'Landing', flying
+		? 'Look where you want to go. Look up to climb.'
+		: 'You’ll drift gently back to the ground.' );
+
+}
+
+function updateModeLabel() {
+
+	ui.hudMode.textContent = flying ? 'Flying' : 'On foot';
+	ui.hudMode.dataset.mode = flying ? 'fly' : 'walk';
+
+}
+
+// ---------------------------------------------------------------- movement
+
 const _n = new THREE.Vector3();
-const _m = new THREE.Matrix3();
-const DOWN = new THREE.Vector3( 0, - 1, 0 );
-
-function castRay( origin, dir, far ) {
-
-	if ( ! tiles ) return null;
-	ray.set( origin, dir );
-	ray.near = 0;
-	ray.far = far;
-	hits.length = 0;
-	tiles.raycast( ray, hits );
-	if ( ! hits.length ) return null;
-	hits.sort( ( a, b ) => a.distance - b.distance );
-	return hits[ 0 ];
-
-}
-
-function hitNormal( hit, target ) {
-
-	if ( ! hit.face ) return target.set( 0, 0, 0 );
-	_m.getNormalMatrix( hit.object.matrixWorld );
-	return target.copy( hit.face.normal ).applyMatrix3( _m ).normalize();
-
-}
-
-function groundBelow( x, z, fromY, far ) {
-
-	const hit = castRay( _v.set( x, fromY, z ), DOWN, far );
-	return hit ? hit.point.y : null;
-
-}
-
 const move = new THREE.Vector3();
 const fwd = new THREE.Vector3();
 const right = new THREE.Vector3();
+const _o = new THREE.Vector3();
 
-// forward/strafe in -1..1, speed in m/s
-function stepPlayer( dt, forward, strafe, speed ) {
+// Slide a movement vector along whatever it would run into.
+function collide( origin, mv ) {
+
+	for ( let pass = 0; pass < 2 && mv.lengthSq() > 0; pass ++ ) {
+
+		const len = mv.length();
+		const hit = castRay( origin, _o.copy( mv ).divideScalar( len ), len + BODY );
+		if ( ! hit ) return;
+		hitNormal( hit, _n );
+		if ( ! flying ) _n.y = 0;
+		if ( _n.lengthSq() < 1e-4 ) {
+
+			mv.set( 0, 0, 0 );
+			return;
+
+		}
+
+		_n.normalize();
+		const into = mv.dot( _n );
+		if ( into < 0 ) mv.addScaledVector( _n, - into );
+		if ( pass === 1 ) mv.set( 0, 0, 0 );
+
+	}
+
+}
+
+// forward/strafe/vertical in -1..1, speed in m/s
+function stepPlayer( dt, forward, strafe, speed, vertical = 0 ) {
 
 	readHead();
 
@@ -339,7 +518,7 @@ function stepPlayer( dt, forward, strafe, speed ) {
 	if ( awaitingGround ) {
 
 		const g = groundBelow( head.x, head.z, rig.position.y + 400, 800 );
-		const settled = tiles && tiles.stats.downloading + tiles.stats.parsing < 4;
+		const settled = ! tiles || tiles.stats.downloading + tiles.stats.parsing < 4;
 		if ( g !== null && ( settled || performance.now() - spawnedAt > 6000 ) ) {
 
 			rig.position.y = g;
@@ -348,6 +527,14 @@ function stepPlayer( dt, forward, strafe, speed ) {
 
 		}
 
+		speedNow = 0;
+		return;
+
+	}
+
+	if ( flying ) {
+
+		flyStep( dt, forward, strafe, speed, vertical );
 		return;
 
 	}
@@ -361,39 +548,17 @@ function stepPlayer( dt, forward, strafe, speed ) {
 	move.multiplyScalar( speed * dt );
 
 	// Walls: cast at waist height in the walking direction and slide along what we hit.
-	if ( move.lengthSq() > 0 ) {
-
-		const waist = new THREE.Vector3( head.x, rig.position.y + 1.0, head.z );
-		for ( let pass = 0; pass < 2 && move.lengthSq() > 0; pass ++ ) {
-
-			const len = move.length();
-			const hit = castRay( waist, move.clone().divideScalar( len ), len + BODY );
-			if ( ! hit ) break;
-			hitNormal( hit, _n );
-			_n.y = 0;
-			if ( _n.lengthSq() < 1e-4 ) {
-
-				move.set( 0, 0, 0 );
-				break;
-
-			}
-
-			_n.normalize();
-			const into = move.dot( _n );
-			if ( into < 0 ) move.addScaledVector( _n, - into );
-			if ( pass === 1 ) move.set( 0, 0, 0 );
-
-		}
-
-	}
+	if ( move.lengthSq() > 0 ) collide( new THREE.Vector3( head.x, rig.position.y + 1.0, head.z ), move );
 
 	const nx = head.x + move.x;
 	const nz = head.z + move.z;
-	const g = groundBelow( nx, nz, rig.position.y + 1.6, 300 );
+	const above = rig.position.y + 1.6;
+	const g = groundBelow( nx, nz, above, 3000 );
 
+	// Nothing loaded under the next step yet: hold still rather than walk into a void.
 	if ( g === null ) {
 
-		// Nothing loaded under the next step yet: hold still rather than walk into a void.
+		speedNow = 0;
 		return;
 
 	}
@@ -402,20 +567,49 @@ function stepPlayer( dt, forward, strafe, speed ) {
 
 	rig.position.x += move.x;
 	rig.position.z += move.z;
+	speedNow = move.length() / Math.max( dt, 1e-4 );
 
 	if ( g >= rig.position.y - 0.05 ) {
 
-		// Stepping up (or on level ground): ease onto the new height.
+		// Stepping up (or on level ground, or riding a rising pillar): ease onto the new height.
 		rig.position.y += ( g - rig.position.y ) * Math.min( 1, dt * 12 );
 		vy = 0;
 
 	} else {
 
-		vy -= 9.8 * dt;
+		// Falling. Gods come down gently: speed scales with the drop that's left.
+		const drop = rig.position.y - g;
+		const target = - Math.min( 20, 1.5 + drop * 1.4 );
+		vy += ( target - vy ) * Math.min( 1, dt * 3 );
 		rig.position.y = Math.max( g, rig.position.y + vy * dt );
 		if ( rig.position.y === g ) vy = 0;
 
 	}
+
+}
+
+function flyStep( dt, forward, strafe, speed, vertical ) {
+
+	// Fly where you look, including up and down.
+	fwd.copy( headDir ).normalize();
+	right.set( - headDir.z, 0, headDir.x ).normalize();
+	move.set( 0, 0, 0 )
+		.addScaledVector( fwd, forward )
+		.addScaledVector( right, strafe )
+		.addScaledVector( new THREE.Vector3( 0, 1, 0 ), vertical );
+	if ( move.lengthSq() > 1 ) move.normalize();
+	move.multiplyScalar( speed * dt );
+
+	if ( move.lengthSq() > 0 ) collide( head.clone(), move );
+
+	rig.position.add( move );
+	speedNow = move.length() / Math.max( dt, 1e-4 );
+
+	// never sink into the ground; never leave the atmosphere
+	readHead();
+	const g = groundBelow( head.x, head.z, head.y + 0.5, 3000 );
+	if ( g !== null && rig.position.y < g ) rig.position.y = g;
+	if ( g !== null && rig.position.y > g + MAX_ALTITUDE ) rig.position.y = g + MAX_ALTITUDE;
 
 }
 
@@ -424,13 +618,32 @@ function stepPlayer( dt, forward, strafe, speed ) {
 const keys = new Set();
 let dragging = false;
 
+function screenCast( kind ) {
+
+	if ( ! alchemy.armed() ) return;
+	readHead();
+	if ( kind === 'push' ) alchemy.cast( 'push', { origin: head.clone(), dir: headDir.clone() } );
+	if ( kind === 'ground' ) alchemy.cast( 'ground', { from: new THREE.Vector3( head.x, rig.position.y, head.z ), facing: headDir.clone() } );
+	if ( kind === 'raise' ) alchemy.cast( 'raise', { head: head.clone(), floorY: rig.position.y } );
+
+}
+
 addEventListener( 'keydown', e => {
 
 	if ( e.target.closest( 'input, select, textarea' ) ) return;
+	if ( ui.menu.open && e.code !== 'Escape' ) return;
 	keys.add( e.code );
+	if ( e.repeat ) return;
 	if ( e.code === 'Escape' && ! ui.menu.open ) openMenu();
 	if ( e.code === 'KeyN' ) nextPlace( 1 );
 	if ( e.code === 'KeyB' ) nextPlace( - 1 );
+	if ( e.code === 'KeyF' ) toggleFlight();
+	if ( e.code === 'KeyC' ) alchemy.clap();
+	if ( e.code === 'KeyT' ) screenCast( 'push' );
+	if ( e.code === 'KeyG' ) screenCast( 'ground' );
+	if ( e.code === 'KeyR' ) screenCast( 'raise' );
+	if ( e.code === 'KeyX' ) alchemy.clearAll();
+	if ( e.code === 'Space' ) e.preventDefault();
 
 } );
 addEventListener( 'keyup', e => keys.delete( e.code ) );
@@ -438,6 +651,13 @@ addEventListener( 'blur', () => keys.clear() );
 
 const canvas = renderer.domElement;
 canvas.addEventListener( 'pointerdown', e => {
+
+	if ( alchemy.armed() && ( document.pointerLockElement === canvas || e.pointerType !== 'mouse' ) ) {
+
+		screenCast( 'push' );
+		return;
+
+	}
 
 	dragging = true;
 	canvas.setPointerCapture( e.pointerId );
@@ -468,13 +688,16 @@ function screenInput( dt ) {
 
 	const f = ( keys.has( 'KeyW' ) || keys.has( 'ArrowUp' ) ? 1 : 0 ) - ( keys.has( 'KeyS' ) || keys.has( 'ArrowDown' ) ? 1 : 0 );
 	const s = ( keys.has( 'KeyD' ) ? 1 : 0 ) - ( keys.has( 'KeyA' ) ? 1 : 0 );
+	const v = ( keys.has( 'Space' ) || keys.has( 'KeyE' ) ? 1 : 0 ) - ( keys.has( 'KeyQ' ) ? 1 : 0 );
 	const turn = ( keys.has( 'ArrowLeft' ) ? 1 : 0 ) - ( keys.has( 'ArrowRight' ) ? 1 : 0 );
 	yaw += turn * 1.6 * dt;
 	rig.rotation.y = yaw;
 	camera.rotation.set( pitch, 0, 0 );
-	const speed = keys.has( 'ShiftLeft' ) || keys.has( 'ShiftRight' ) ? RUN : WALK;
-	// walk along the ground, not where the camera tilts
-	stepPlayer( dt, f, s, speed );
+	const fast = keys.has( 'ShiftLeft' ) || keys.has( 'ShiftRight' );
+	const speed = flying ? ( fast ? BOOST : FLY ) : ( fast ? RUN : WALK );
+	stepPlayer( dt, f, s, speed, v );
+	alchemy.setScreenGlow( true );
+	ui.crosshair.hidden = ! alchemy.armed();
 
 }
 
@@ -491,21 +714,36 @@ function edge( id, isDown ) {
 
 const pinchState = { left: false, right: false };
 let travelHold = 0;
+let leftPinchStart = 0;
+let leftPinchEnd = - 10;
+let leftPinchLen = 10;
+
+const _p = new THREE.Vector3();
+const _q = new THREE.Vector3();
+
+function jointDistance( frame, source, ref, a, b ) {
+
+	const ja = source.hand.get( a ), jb = source.hand.get( b );
+	if ( ! ja || ! jb || ! frame.getJointPose ) return null;
+	const pa = frame.getJointPose( ja, ref ), pb = frame.getJointPose( jb, ref );
+	if ( ! pa || ! pb ) return null;
+	const A = pa.transform.position, B = pb.transform.position;
+	return Math.hypot( A.x - B.x, A.y - B.y, A.z - B.z );
+
+}
 
 function pinching( frame, source, ref ) {
 
-	const thumb = source.hand.get( 'thumb-tip' );
-	const index = source.hand.get( 'index-finger-tip' );
-	if ( ! thumb || ! index || ! frame.getJointPose ) return false;
-	const a = frame.getJointPose( thumb, ref );
-	const b = frame.getJointPose( index, ref );
-	if ( ! a || ! b ) return false;
-	const dx = a.transform.position.x - b.transform.position.x;
-	const dy = a.transform.position.y - b.transform.position.y;
-	const dz = a.transform.position.z - b.transform.position.z;
-	const d = Math.hypot( dx, dy, dz );
-	const was = pinchState[ source.handedness ];
-	return was ? d < 0.035 : d < 0.018; // hysteresis so a held pinch doesn't flicker
+	const d = jointDistance( frame, source, ref, 'thumb-tip', 'index-finger-tip' );
+	if ( d === null ) return false;
+	return pinchState[ source.handedness ] ? d < 0.035 : d < 0.018; // hysteresis so a held pinch doesn't flicker
+
+}
+
+// a pose in the reference space, moved into world space
+function toWorld( pos, target ) {
+
+	return target.set( pos.x, pos.y, pos.z ).applyMatrix4( rig.matrixWorld );
 
 }
 
@@ -513,15 +751,22 @@ function xrInput( dt, frame ) {
 
 	const session = renderer.xr.getSession();
 	const ref = renderer.xr.getReferenceSpace();
+	rig.updateMatrixWorld( true );
+	readHead();
+
 	let forward = 0;
 	let strafe = 0;
-	let speed = WALK;
+	let vertical = 0;
+	let fast = false;
 	let leftPinch = false;
 	let rightPinch = false;
+	const palms = [ null, null ];
+	activeHaptics = [];
 
 	for ( const source of session.inputSources ) {
 
 		const side = source.handedness;
+		const slot = side === 'left' ? 0 : side === 'right' ? 1 : - 1;
 
 		if ( source.hand ) {
 
@@ -529,45 +774,92 @@ function xrInput( dt, frame ) {
 			pinchState[ side ] = p;
 			if ( side === 'left' ) leftPinch = p;
 			if ( side === 'right' ) rightPinch = p;
+
+			const palm = source.hand.get( 'middle-finger-metacarpal' );
+			const pose = palm && frame.getJointPose ? frame.getJointPose( palm, ref ) : null;
+			if ( pose && slot >= 0 ) palms[ slot ] = toWorld( pose.transform.position, new THREE.Vector3() );
 			continue;
 
 		}
 
 		const gp = source.gamepad;
+		if ( source.gripSpace && slot >= 0 ) {
+
+			const pose = frame.getPose( source.gripSpace, ref );
+			if ( pose ) palms[ slot ] = toWorld( pose.transform.position, new THREE.Vector3() );
+
+		}
+
 		if ( ! gp ) continue;
+		if ( gp.hapticActuators?.[ 0 ] ) activeHaptics.push( gp.hapticActuators[ 0 ] );
 		const ax = gp.axes.length >= 4 ? gp.axes[ 2 ] : gp.axes[ 0 ] || 0;
 		const ay = gp.axes.length >= 4 ? gp.axes[ 3 ] : gp.axes[ 1 ] || 0;
 		const btn = i => !! ( gp.buttons[ i ] && gp.buttons[ i ].pressed );
+		const dead = v => ( Math.abs( v ) < 0.15 ? 0 : v );
 
 		if ( side === 'left' ) {
 
-			const dead = v => ( Math.abs( v ) < 0.15 ? 0 : v );
 			forward = - dead( ay );
 			strafe = dead( ax );
-			if ( btn( 3 ) || btn( 1 ) ) speed = RUN; // click the stick or squeeze grip to hurry
+			if ( btn( 3 ) ) fast = true; // click the stick to hurry
 			if ( edge( 'left-x', btn( 4 ) ) ) nextPlace( 1 );
-			if ( edge( 'left-y', btn( 5 ) ) ) nextPlace( - 1 );
+			if ( edge( 'left-y', btn( 5 ) ) ) toggleFlight();
 
 		} else if ( side === 'right' ) {
 
 			if ( edge( 'snap-r', ax > 0.7 ) ) turnBy( - Math.PI / 6 );
 			if ( edge( 'snap-l', ax < - 0.7 ) ) turnBy( Math.PI / 6 );
+			if ( flying ) vertical = - dead( ay );
+			if ( btn( 3 ) ) fast = true;
 			if ( edge( 'right-a', btn( 4 ) ) ) nextPlace( 1 );
-			if ( edge( 'right-b', btn( 5 ) ) ) nextPlace( - 1 );
+			if ( edge( 'right-b', btn( 5 ) ) ) toggleFlight();
+
+			// trigger while charged: transmute where this controller points
+			if ( edge( 'right-trigger', btn( 0 ) ) && alchemy.armed() && source.targetRaySpace ) {
+
+				const aim = frame.getPose( source.targetRaySpace, ref );
+				if ( aim ) {
+
+					const o = aim.transform.orientation;
+					const q = new THREE.Quaternion( o.x, o.y, o.z, o.w );
+					const dir = new THREE.Vector3( 0, 0, - 1 ).applyQuaternion( q ).applyQuaternion( rig.quaternion );
+					alchemy.cast( 'push', { origin: toWorld( aim.transform.position, _q ), dir } );
+
+				}
+
+			}
 
 		}
 
 	}
 
 	// Hands: pinch your left fingers to walk where you look; pinch both to hurry.
-	// Hold a right-hand pinch on its own for a second to travel to the next landmark.
-	if ( leftPinch ) {
+	// Pinch left twice quickly to take off or land.
+	const now = performance.now() / 1000;
+	if ( leftPinch && ! pinchState._leftWas ) {
 
-		forward = 1;
-		speed = rightPinch ? RUN : WALK;
+		if ( now - leftPinchEnd < 0.4 && leftPinchLen < 0.35 ) toggleFlight();
+		leftPinchStart = now;
 
 	}
 
+	if ( ! leftPinch && pinchState._leftWas ) {
+
+		leftPinchEnd = now;
+		leftPinchLen = now - leftPinchStart;
+
+	}
+
+	pinchState._leftWas = leftPinch;
+
+	if ( leftPinch ) {
+
+		forward = 1;
+		fast = rightPinch;
+
+	}
+
+	// Hold a right-hand pinch on its own for a second to travel to the next landmark.
 	if ( rightPinch && ! leftPinch ) {
 
 		travelHold += dt;
@@ -586,7 +878,10 @@ function xrInput( dt, frame ) {
 
 	}
 
-	stepPlayer( dt, forward, strafe, speed );
+	alchemy.trackPalms( palms, head, headDir, dt );
+
+	const speed = flying ? ( fast ? BOOST : FLY ) : ( fast ? RUN : WALK );
+	stepPlayer( dt, forward, strafe, speed, vertical );
 
 }
 
@@ -606,12 +901,11 @@ function makePanel( w, h, scale ) {
 
 }
 
-// Arrival card, shown low in your view for a few seconds.
+// Arrival card and notices, shown low in your view for a few seconds.
 const toast = makePanel( 1024, 256, 0.16 );
 toast.mesh.position.set( 0, - 0.2, - 0.9 );
 toast.mesh.visible = false;
 camera.add( toast.mesh );
-let toastUntil = 0;
 
 function showToast( title, sub ) {
 
@@ -655,8 +949,10 @@ function drawCredit( text ) {
 }
 
 // Ring that fills while you hold the right-hand travel pinch.
-const ringGeo = new THREE.RingGeometry( 0.018, 0.024, 48, 1, Math.PI / 2, 0.0001 );
-const ring = new THREE.Mesh( ringGeo, new THREE.MeshBasicMaterial( { color: 0xa8d5d1, depthTest: false, transparent: true, fog: false, toneMapped: false } ) );
+const ring = new THREE.Mesh(
+	new THREE.RingGeometry( 0.018, 0.024, 48, 1, Math.PI / 2, 0.0001 ),
+	new THREE.MeshBasicMaterial( { color: 0xa8d5d1, depthTest: false, transparent: true, fog: false, toneMapped: false } ),
+);
 ring.position.set( 0, 0, - 0.8 );
 ring.renderOrder = 999;
 ring.visible = false;
@@ -674,6 +970,29 @@ function setTravelProgress( p ) {
 
 }
 
+// Comfort vignette: the edges of your view dim while you move fast or snap-turn,
+// which cuts motion sickness a lot when flying.
+const vignette = new THREE.Mesh(
+	new THREE.PlaneGeometry( 2, 2 ),
+	new THREE.ShaderMaterial( {
+		uniforms: { uStrength: { value: 0 } },
+		vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }',
+		fragmentShader: `
+			uniform float uStrength; varying vec2 vUv;
+			void main(){
+				float d = length( vUv - 0.5 ) * 2.0;
+				float a = smoothstep( mix( 1.0, 0.35, uStrength ), mix( 1.3, 0.75, uStrength ), d ) * uStrength;
+				gl_FragColor = vec4( 0.0, 0.0, 0.0, a );
+			}`,
+		transparent: true, depthTest: false, depthWrite: false,
+	} ),
+);
+vignette.position.set( 0, 0, - 0.3 );
+vignette.renderOrder = 1000;
+vignette.visible = false;
+camera.add( vignette );
+let vignetteLevel = 0;
+
 function roundRect( ctx, x, y, w, h, r ) {
 
 	ctx.beginPath();
@@ -688,13 +1007,13 @@ function roundRect( ctx, x, y, w, h, r ) {
 
 // ---------------------------------------------------------------- menu & sessions
 
-const ambience = new HarborAmbience();
-
 function openMenu() {
 
 	if ( document.pointerLockElement ) document.exitPointerLock();
 	ui.menu.open = true;
 	ui.hud.hidden = true;
+	ui.crosshair.hidden = true;
+	alchemy.setScreenGlow( false );
 
 }
 
@@ -707,7 +1026,7 @@ function closeMenu() {
 
 function haveKey() {
 
-	return !! store.get( 'key' );
+	return OFFLINE || !! store.get( 'key' );
 
 }
 
@@ -741,7 +1060,7 @@ ui.keyForm.addEventListener( 'submit', e => {
 	store.set( 'key', k );
 	ui.keyState.textContent = 'Checking the key with Google…';
 	ui.keyState.dataset.state = '';
-	startTiles( k );
+	if ( ! OFFLINE ) startTiles( k );
 	refreshButtons();
 
 } );
@@ -819,8 +1138,11 @@ renderer.xr.addEventListener( 'sessionstart', () => {
 
 	ui.menu.open = false;
 	ui.hud.hidden = true;
+	ui.crosshair.hidden = true;
+	alchemy.setScreenGlow( false );
 	toast.mesh.visible = true;
 	credit.mesh.visible = true;
+	vignette.visible = true;
 	camera.position.set( 0, 0, 0 );
 	camera.rotation.set( 0, 0, 0 );
 	applyQuality();
@@ -832,11 +1154,13 @@ renderer.xr.addEventListener( 'sessionend', () => {
 
 	toast.mesh.visible = false;
 	credit.mesh.visible = false;
+	vignette.visible = false;
 	ring.visible = false;
 	camera.position.set( 0, EYE, 0 );
 	camera.quaternion.identity();
 	yaw = rig.rotation.y;
 	pitch = 0;
+	ambience.setFlightSpeed( 0 );
 	applyQuality();
 	openMenu();
 
@@ -860,7 +1184,7 @@ renderer.setAnimationLoop( ( time, frame ) => {
 	const dt = Math.min( clock.getDelta(), 0.1 );
 	const inXR = renderer.xr.isPresenting;
 
-	if ( tiles && rootReady ) {
+	if ( rootReady ) {
 
 		if ( inXR ) xrInput( dt, frame );
 		else if ( ! ui.menu.open ) screenInput( dt );
@@ -873,6 +1197,9 @@ renderer.setAnimationLoop( ( time, frame ) => {
 		}
 
 	}
+
+	alchemy.update( dt );
+	ambience.setFlightSpeed( flying ? speedNow : 0 );
 
 	if ( tiles ) {
 
@@ -897,7 +1224,15 @@ renderer.setAnimationLoop( ( time, frame ) => {
 
 	}
 
-	if ( inXR ) toast.mesh.visible = performance.now() < toastUntil;
+	if ( inXR ) {
+
+		toast.mesh.visible = performance.now() < toastUntil;
+		turnFlash = Math.max( 0, turnFlash - dt );
+		const want = Math.max( THREE.MathUtils.clamp( ( speedNow - 3 ) / 20, 0, 0.85 ), turnFlash > 0 ? 0.6 : 0 );
+		vignetteLevel += ( want - vignetteLevel ) * Math.min( 1, dt * 6 );
+		vignette.material.uniforms.uStrength.value = vignetteLevel;
+
+	}
 
 	readHead();
 	sky.position.copy( head );
@@ -907,13 +1242,18 @@ renderer.setAnimationLoop( ( time, frame ) => {
 
 // ---------------------------------------------------------------- boot
 
-if ( haveKey() ) {
+if ( OFFLINE ) startTestGround();
+else if ( haveKey() ) {
 
 	ui.keyState.textContent = 'Checking the saved key with Google…';
 	startTiles( store.get( 'key' ) );
 
 }
 
+updateModeLabel();
 ui.menu.open = true;
 checkXR();
 refreshButtons();
+
+// handy for testing from the browser console
+window.charleston = { alchemy, toggleFlight, nextPlace, rig, camera, notify, screenCast };

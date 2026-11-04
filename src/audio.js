@@ -56,13 +56,187 @@ export class HarborAmbience {
 		this._swell( windFilter.frequency, 500, 1400, 10, 16 );
 		this._swell( windGain.gain, 0.015, 0.06, 8, 14 );
 
+		// Rushing air while flying fast; silent until setFlightSpeed() raises it.
+		const rush = this._loop( noise, 2.3 );
+		this.rushFilter = ctx.createBiquadFilter();
+		this.rushFilter.type = 'bandpass';
+		this.rushFilter.Q.value = 0.7;
+		this.rushFilter.frequency.value = 600;
+		this.rushGain = ctx.createGain();
+		this.rushGain.gain.value = 0;
+		rush.connect( this.rushFilter ).connect( this.rushGain ).connect( this.master );
+
 		this._scheduleGull();
+
+	}
+
+	setFlightSpeed( mps ) {
+
+		if ( ! this.rushGain ) return;
+		const k = Math.min( 1, mps / 35 );
+		const t = this.ctx.currentTime;
+		this.rushGain.gain.setTargetAtTime( k * 0.5, t, 0.2 );
+		this.rushFilter.frequency.setTargetAtTime( 400 + k * 1400, t, 0.2 );
 
 	}
 
 	stop() {
 
 		if ( this.ctx ) this.ctx.suspend();
+
+	}
+
+	// ------------------------------------------------ alchemy and flight effects
+
+	_burst( seconds, setup ) {
+
+		const ctx = this.ctx;
+		if ( ! ctx ) return;
+		const src = ctx.createBufferSource();
+		src.buffer = this._whiteNoise || ( this._whiteNoise = this._white( 2 ) );
+		const out = ctx.createGain();
+		out.connect( this.master );
+		setup( src, out, ctx.currentTime );
+		src.start();
+		src.stop( ctx.currentTime + seconds );
+
+	}
+
+	_white( seconds ) {
+
+		const ctx = this.ctx;
+		const buffer = ctx.createBuffer( 1, ctx.sampleRate * seconds, ctx.sampleRate );
+		const d = buffer.getChannelData( 0 );
+		for ( let i = 0; i < d.length; i ++ ) d[ i ] = Math.random() * 2 - 1;
+		return buffer;
+
+	}
+
+	clap() {
+
+		this._burst( 0.15, ( src, out, t ) => {
+
+			const bp = this.ctx.createBiquadFilter();
+			bp.type = 'bandpass';
+			bp.frequency.value = 1400;
+			bp.Q.value = 0.8;
+			out.gain.setValueAtTime( 0.9, t );
+			out.gain.exponentialRampToValueAtTime( 0.001, t + 0.12 );
+			src.connect( bp ).connect( out );
+
+		} );
+
+	}
+
+	// a low electric hum while your hands are charged
+	charge( on ) {
+
+		const ctx = this.ctx;
+		if ( ! ctx ) return;
+		if ( on && ! this._hum ) {
+
+			const g = ctx.createGain();
+			g.gain.value = 0;
+			g.gain.linearRampToValueAtTime( 0.05, ctx.currentTime + 0.2 );
+			const trem = ctx.createGain();
+			const lfo = ctx.createOscillator();
+			lfo.frequency.value = 23;
+			const lfoGain = ctx.createGain();
+			lfoGain.gain.value = 0.5;
+			lfo.connect( lfoGain ).connect( trem.gain );
+			const a = ctx.createOscillator();
+			a.type = 'sawtooth';
+			a.frequency.value = 110;
+			const b = ctx.createOscillator();
+			b.type = 'square';
+			b.frequency.value = 165.5;
+			const lp = ctx.createBiquadFilter();
+			lp.type = 'lowpass';
+			lp.frequency.value = 900;
+			a.connect( lp );
+			b.connect( lp );
+			lp.connect( trem ).connect( g ).connect( this.master );
+			[ a, b, lfo ].forEach( o => o.start() );
+			this._hum = { g, oscs: [ a, b, lfo ] };
+
+		} else if ( ! on && this._hum ) {
+
+			const { g, oscs } = this._hum;
+			this._hum = null;
+			g.gain.cancelScheduledValues( ctx.currentTime );
+			g.gain.setValueAtTime( g.gain.value, ctx.currentTime );
+			g.gain.linearRampToValueAtTime( 0, ctx.currentTime + 0.25 );
+			oscs.forEach( o => o.stop( ctx.currentTime + 0.3 ) );
+
+		}
+
+	}
+
+	// crackling arcs plus the grind and rumble of stone breaking through
+	transmute( seconds = 1 ) {
+
+		const ctx = this.ctx;
+		if ( ! ctx ) return;
+
+		this._burst( seconds + 0.4, ( src, out, t ) => {
+
+			const hp = ctx.createBiquadFilter();
+			hp.type = 'highpass';
+			hp.frequency.value = 2600;
+			src.connect( hp ).connect( out );
+			// random on/off steps make noise sound like electrical arcing
+			for ( let x = t; x < t + seconds + 0.3; x += 0.012 + Math.random() * 0.03 ) {
+
+				const fade = 1 - ( x - t ) / ( seconds + 0.3 );
+				out.gain.setValueAtTime( Math.random() < 0.55 ? 0.45 * fade : 0.02, x );
+
+			}
+
+			out.gain.setValueAtTime( 0, t + seconds + 0.35 );
+
+		} );
+
+		this._burst( seconds + 1.2, ( src, out, t ) => {
+
+			const lp = ctx.createBiquadFilter();
+			lp.type = 'lowpass';
+			lp.frequency.value = 160;
+			src.playbackRate.value = 0.5;
+			out.gain.setValueAtTime( 0, t );
+			out.gain.linearRampToValueAtTime( 1.6, t + 0.08 );
+			out.gain.linearRampToValueAtTime( 0.9, t + seconds );
+			out.gain.linearRampToValueAtTime( 0, t + seconds + 1.1 );
+			src.connect( lp ).connect( out );
+
+		} );
+
+		const sub = ctx.createOscillator();
+		const sg = ctx.createGain();
+		sub.frequency.value = 42;
+		sg.gain.setValueAtTime( 0, ctx.currentTime );
+		sg.gain.linearRampToValueAtTime( 0.35, ctx.currentTime + 0.05 );
+		sg.gain.linearRampToValueAtTime( 0, ctx.currentTime + seconds + 0.6 );
+		sub.connect( sg ).connect( this.master );
+		sub.start();
+		sub.stop( ctx.currentTime + seconds + 0.7 );
+
+	}
+
+	whoosh( up = true ) {
+
+		this._burst( 0.9, ( src, out, t ) => {
+
+			const bp = this.ctx.createBiquadFilter();
+			bp.type = 'bandpass';
+			bp.Q.value = 1.2;
+			bp.frequency.setValueAtTime( up ? 300 : 1400, t );
+			bp.frequency.exponentialRampToValueAtTime( up ? 1600 : 250, t + 0.8 );
+			out.gain.setValueAtTime( 0, t );
+			out.gain.linearRampToValueAtTime( 0.35, t + 0.25 );
+			out.gain.linearRampToValueAtTime( 0, t + 0.85 );
+			src.connect( bp ).connect( out );
+
+		} );
 
 	}
 

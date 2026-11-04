@@ -116,6 +116,39 @@
 		text-shadow: 0 1px 8px rgba(0,0,0,.6);
 	}
 	#hud-menu { pointer-events: auto; background: rgba(28,36,33,.75); }
+	.hud-left { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
+	#hud-mode {
+		font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+		padding: 3px 8px; border-radius: 999px;
+		background: rgba(28,36,33,.7); color: var(--muted);
+	}
+	#hud-mode[data-mode="fly"] { background: var(--haint); color: var(--shutter); font-weight: 700; }
+
+	#hint {
+		position: fixed; left: 50%; transform: translateX(-50%);
+		bottom: max(44px, calc(env(safe-area-inset-bottom, 0px) + 36px));
+		width: min(560px, calc(100% - 32px));
+		background: rgba(28,36,33,.85); border-left: 3px solid var(--haint);
+		padding: 10px 14px; border-radius: 6px; font-size: 14px; color: var(--muted);
+		pointer-events: none;
+	}
+	#hint strong { color: var(--paper); font-weight: 700; }
+
+	#crosshair {
+		position: fixed; left: 50%; top: 50%; width: 28px; height: 28px;
+		margin: -14px 0 0 -14px; border-radius: 50%;
+		border: 2px solid var(--haint);
+		box-shadow: 0 0 0 1.5px rgba(0,0,0,.55), inset 0 0 0 1.5px rgba(0,0,0,.55), 0 0 14px var(--haint);
+		pointer-events: none;
+	}
+	#crosshair::after {
+		content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px;
+		margin: -2px 0 0 -2px; border-radius: 50%; background: var(--haint);
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		#crosshair { animation: charge .5s ease-in-out infinite alternate; }
+		@keyframes charge { to { transform: scale(1.15); } }
+	}
 
 	#loading {
 		position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
@@ -139,7 +172,7 @@
 	<header>
 		<p class="eyebrow">Downtown, at street level</p>
 		<h1>Charleston <em>XR</em></h1>
-		<p class="lede">Walk the peninsula from the Battery to Marion Square, in Google’s photographed 3D city.</p>
+		<p class="lede">Walk or fly the peninsula from the Battery to Marion Square, in Google’s photographed 3D city. Clap to transmute the streets.</p>
 		<p class="coords">32.7760° N, 79.9300° W</p>
 	</header>
 
@@ -181,22 +214,35 @@
 		<summary>Controls</summary>
 		<h3>Hands</h3>
 		<dl>
-			<dt>Left pinch</dt><dd>Hold to walk where you’re looking</dd>
+			<dt>Left pinch</dt><dd>Hold to walk (or fly) where you’re looking</dd>
 			<dt>Both pinch</dt><dd>Hurry</dd>
+			<dt>Left pinch ×2</dt><dd>Two quick pinches: take off or land</dd>
 			<dt>Right pinch</dt><dd>Hold one second to travel to the next landmark</dd>
 			<dt>Turn</dt><dd>Turn your head and body</dd>
 		</dl>
+		<h3>Alchemy</h3>
+		<dl>
+			<dt>Clap</dt><dd>Charge your hands for five seconds</dd>
+			<dt>Touch ground</dt><dd>Spikes race away from you</dd>
+			<dt>Push</dt><dd>Stone bursts from what you’re looking at, ground or wall</dd>
+			<dt>Raise hands</dt><dd>A pillar lifts you 12 m up</dd>
+		</dl>
+		<p class="hint">Creations sink back into the street after a few minutes.</p>
 		<h3>Controllers</h3>
 		<dl>
-			<dt>Left stick</dt><dd>Walk; click the stick or squeeze grip to hurry</dd>
-			<dt>Right stick</dt><dd>Flick left or right to turn 30°</dd>
+			<dt>Left stick</dt><dd>Walk or fly; click either stick to hurry</dd>
+			<dt>Right stick</dt><dd>Flick left or right to turn 30°; up or down to climb while flying</dd>
+			<dt>B / Y</dt><dd>Take off or land</dd>
 			<dt>A / X</dt><dd>Next landmark</dd>
-			<dt>B / Y</dt><dd>Previous landmark</dd>
+			<dt>Clap</dt><dd>Tap the controllers together, then push, touch the floor, raise them, or pull the right trigger to aim</dd>
 		</dl>
 		<h3>Keyboard &amp; mouse</h3>
 		<dl>
 			<dt>W A S D</dt><dd>Walk, Shift to hurry</dd>
 			<dt>Mouse</dt><dd>Click, then move to look</dd>
+			<dt>F</dt><dd>Take off or land; Space or E to climb, Q to descend</dd>
+			<dt>C</dt><dd>Clap, then click or T to push, G for spikes, R to rise</dd>
+			<dt>X</dt><dd>Sink everything you’ve made</dd>
 			<dt>N / B</dt><dd>Next or previous landmark</dd>
 			<dt>Esc</dt><dd>This menu</dd>
 		</dl>
@@ -204,10 +250,12 @@
 </dialog>
 
 <div id="hud" hidden>
-	<span id="hud-place"></span>
+	<div class="hud-left"><span id="hud-place"></span><span id="hud-mode" data-mode="walk">On foot</span></div>
 	<button id="hud-menu" type="button">Menu</button>
 </div>
 <div id="loading" hidden>Loading the street…</div>
+<div id="hint" hidden aria-live="polite"></div>
+<div id="crosshair" hidden></div>
 <div id="attribution"></div>
 
 <script type="module" src="./app.js"></script>
