@@ -1,0 +1,31 @@
+# Fetches downtown Charleston's streets and footpaths from OpenStreetMap and
+# commits them to data/osm-downtown.json. Run it by hand from the Actions tab
+# (or the API) whenever the map data should be refreshed.
+name: Fetch OpenStreetMap data
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/fetch-osm.mjs
+      - name: Commit the data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/osm-downtown.json
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Update OpenStreetMap data for downtown Charleston"
+            git push
+          fi
