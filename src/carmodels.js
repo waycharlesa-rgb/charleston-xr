@@ -56,40 +56,71 @@ export const CAR_TYPES = {
 	},
 	rangerover: {
 		label: 'Range Rover', basedOn: 'Range Rover (L460, 2022–)',
-		L: 5.052, W: 2.047, H: 1.87, wheelbase: 2.997, frontOverhang: 0.93, wheelR: 0.41, tireW: 0.285, rimR: 0.285,
-		// flat clamshell hood, high level belt line, a roof that falls away slightly to the rear
-		top: [ [ 0, 0.86 ], [ 0.008, 0.98 ], [ 0.03, 1.05 ], [ 0.1, 1.09 ], [ 0.25, 1.12 ], [ 0.29, 1.14 ], [ 0.37, 1.55 ], [ 0.43, 1.8 ], [ 0.5, 1.87 ], [ 0.75, 1.86 ], [ 0.92, 1.83 ], [ 0.955, 1.78 ], [ 0.975, 1.55 ], [ 0.99, 1.2 ], [ 1, 1.0 ] ],
-		belt: [ [ 0, 0.86 ], [ 0.29, 1.13 ], [ 0.9, 1.18 ], [ 1, 1.15 ] ],
-		bottom: [ [ 0, 0.48 ], [ 0.03, 0.34 ], [ 0.1, 0.25 ], [ 0.9, 0.25 ], [ 0.97, 0.34 ], [ 1, 0.5 ] ],
-		halfW: [ [ 0, 0.86 ], [ 0.015, 0.97 ], [ 0.06, 1.015 ], [ 0.2, 1.023 ], [ 0.85, 1.023 ], [ 0.96, 1.0 ], [ 0.99, 0.94 ], [ 1, 0.88 ] ],
-		roofW: [ [ 0, 0.78 ], [ 0.45, 0.82 ], [ 0.8, 0.82 ], [ 1, 0.78 ] ],
-		windshield: [ 0.3, 0.44 ], rearGlass: [ 0.952, 0.99 ], sideGlass: [ 0.315, 0.9 ],
-		pillars: [ [ 0.52, 0.545 ], [ 0.74, 0.76 ] ], // black B and C pillars; the D pillar stays body colour
-		head: { u: [ 0.003, 0.05 ], y: [ 0.93, 1.02 ], x: [ 0.62, 0.99 ] },
-		tail: { u: [ 0.97, 1 ], y: [ 1.0, 1.3 ], x: [ 0.8, 1.0 ] },
-		blackout: [ { u: [ 0.985, 1 ], y: [ 1.06, 1.16 ], x: [ 0, 0.8 ] } ], // gloss band joining the taillights
-		grille: { u: [ 0, 0.02 ], y: [ 0.62, 0.95 ], x: 0.5, chrome: false },
-		roofBlack: true,
-		eye: { x: - 0.4, y: 1.56, u: 0.5 }, maxFwd: 30, steerMax: 0.55,
+		L: 5.052, W: 2.047, H: 1.87, wheelbase: 2.997, frontOverhang: 0.855, wheelR: 0.41, tireW: 0.285, rimR: 0.29,
+		// Profile traced from a side-on photo of an L460, scaled to the standard wheelbase:
+		// upright face, long flat clamshell bonnet, high level waist, shallow glass, flat roof.
+		top: [ [ 0, 1.08 ], [ 0.004, 1.13 ], [ 0.012, 1.162 ], [ 0.027, 1.178 ], [ 0.064, 1.199 ], [ 0.155, 1.251 ], [ 0.238, 1.277 ], [ 0.296, 1.294 ], [ 0.359, 1.495 ], [ 0.416, 1.674 ], [ 0.473, 1.846 ], [ 0.521, 1.869 ], [ 0.616, 1.874 ], [ 0.726, 1.87 ], [ 0.813, 1.863 ], [ 0.876, 1.84 ], [ 0.904, 1.774 ], [ 0.931, 1.583 ], [ 0.959, 1.372 ], [ 0.977, 1.266 ], [ 0.99, 1.23 ], [ 1, 1.2 ] ],
+		belt: [ [ 0, 1.08 ], [ 0.296, 1.294 ], [ 0.481, 1.321 ], [ 0.751, 1.322 ], [ 0.959, 1.33 ], [ 1, 1.2 ] ],
+		dloTop: [ [ 0.3, 1.8 ], [ 0.481, 1.803 ], [ 0.751, 1.784 ], [ 0.904, 1.744 ], [ 1, 1.7 ] ],
+		bottom: [ [ 0, 0.4 ], [ 0.02, 0.34 ], [ 0.08, 0.28 ], [ 0.92, 0.28 ], [ 0.98, 0.38 ], [ 1, 0.45 ] ],
+		halfW: [ [ 0, 0.9 ], [ 0.006, 0.965 ], [ 0.02, 1.0 ], [ 0.06, 1.018 ], [ 0.2, 1.023 ], [ 0.85, 1.023 ], [ 0.95, 1.012 ], [ 0.985, 0.98 ], [ 1, 0.93 ] ],
+		roofW: [ [ 0, 0.8 ], [ 0.48, 0.85 ], [ 0.85, 0.85 ], [ 1, 0.8 ] ],
+		shape: { bulge: 0.004, glassInset: 0.035 }, // slab sides, crisp shoulder
+		windshield: [ 0.296, 0.473 ], rearGlass: [ 0.93, 0.995 ], sideGlass: [ 0.33, 0.996 ],
+		pillars: [ [ 0.558, 0.571 ], [ 0.742, 0.756 ], [ 0.958, 0.996 ] ], // all-black pillars: the 'floating' roof
+		head: null, tail: null, grille: { u: [ 0, 0.015 ], y: [ 0.62, 1.0 ], x: 0.5, chrome: false },
+		roofBlack: true, sillTrim: 0.45, mirrorBlack: true, handles: 'paint', privacyGlass: true,
+		rim: { spokes: 16, dark: true },
+		details: [
+			// front: wide mesh grille level with slim headlamps, dark lower intake under a bright bar
+			{ type: 'grille', at: 'front', x: 0.46, y: [ 0.66, 0.98 ], pattern: 'hex', frame: 'chrome' },
+			{ type: 'lamp', at: 'front', x: [ 0.49, 0.85 ], y: [ 0.86, 0.985 ], kind: 'head' },
+			{ type: 'bar', at: 'front', x: 0.64, y: [ 0.47, 0.57 ], mat: 'gloss' },
+			{ type: 'bar', at: 'front', x: 0.72, y: [ 0.58, 0.596 ], mat: 'chrome' },
+			// rear: slim corner lamps joined by a gloss black band; dark lower bumper with reflector
+			{ type: 'lamp', at: 'rear', x: [ 0.78, 0.89 ], y: [ 0.82, 1.18 ], kind: 'tail' },
+			{ type: 'bar', at: 'rear', x: 0.78, y: [ 1.08, 1.17 ], mat: 'gloss' },
+			{ type: 'bar', at: 'rear', x: 0.86, y: [ 0.45, 0.62 ], mat: 'gloss' },
+			{ type: 'bar', at: 'rear', x: 0.72, y: [ 0.625, 0.64 ], mat: 'red' },
+			// sides: the tall vent on each front door, and the door shut lines
+			{ type: 'vent', u: [ 0.315, 0.353 ], y: [ 0.57, 1.2 ] },
+			{ type: 'seam', u: 0.31 }, { type: 'seam', u: 0.556 }, { type: 'seam', u: 0.755 },
+		],
+		eye: { x: - 0.42, y: 1.6, u: 0.5 }, maxFwd: 30, steerMax: 0.55,
 	},
 	escalade: {
 		label: 'Escalade', basedOn: 'Cadillac Escalade (2021–)',
-		L: 5.382, W: 2.06, H: 1.948, wheelbase: 3.071, frontOverhang: 1.0, wheelR: 0.417, tireW: 0.275, rimR: 0.28,
-		// tall flat nose, long flat roof, a near-vertical back
-		top: [ [ 0, 0.98 ], [ 0.006, 1.1 ], [ 0.02, 1.16 ], [ 0.08, 1.19 ], [ 0.27, 1.22 ], [ 0.31, 1.25 ], [ 0.4, 1.7 ], [ 0.46, 1.92 ], [ 0.53, 1.948 ], [ 0.9, 1.94 ], [ 0.96, 1.9 ], [ 0.985, 1.8 ], [ 0.995, 1.5 ], [ 1, 1.1 ] ],
-		belt: [ [ 0, 0.98 ], [ 0.31, 1.22 ], [ 0.92, 1.27 ], [ 1, 1.25 ] ],
-		bottom: [ [ 0, 0.5 ], [ 0.015, 0.4 ], [ 0.07, 0.3 ], [ 0.93, 0.3 ], [ 0.98, 0.38 ], [ 1, 0.52 ] ],
-		halfW: [ [ 0, 0.93 ], [ 0.012, 1.0 ], [ 0.05, 1.025 ], [ 0.2, 1.03 ], [ 0.9, 1.03 ], [ 0.97, 1.02 ], [ 0.995, 0.98 ], [ 1, 0.94 ] ],
-		roofW: [ [ 0, 0.82 ], [ 0.5, 0.86 ], [ 1, 0.84 ] ],
-		windshield: [ 0.31, 0.465 ], rearGlass: [ 0.98, 1 ], sideGlass: [ 0.33, 0.95 ],
-		pillars: [ [ 0.53, 0.555 ], [ 0.75, 0.775 ] ],
-		// headlamps plus the vertical light bars that run down the front corners
-		head: [ { u: [ 0.003, 0.05 ], y: [ 1.0, 1.1 ], x: [ 0.6, 0.98 ] }, { u: [ 0, 0.04 ], y: [ 0.62, 1.0 ], x: [ 0.9, 1.05 ] } ],
-		// tall taillights up the rear corners
-		tail: { u: [ 0.975, 1 ], y: [ 0.9, 1.75 ], x: [ 0.86, 1.05 ] },
-		grille: { u: [ 0, 0.025 ], y: [ 0.55, 1.12 ], x: 0.6, chrome: true },
-		beltChrome: true,
-		eye: { x: - 0.42, y: 1.66, u: 0.5 }, maxFwd: 28, steerMax: 0.52,
+		L: 5.382, W: 2.06, H: 1.948, wheelbase: 3.071, frontOverhang: 1.016, wheelR: 0.417, tireW: 0.275, rimR: 0.28,
+		// Tall, nearly vertical face; long flat bonnet; flat roof; upright tailgate.
+		top: [ [ 0, 1.16 ], [ 0.004, 1.2 ], [ 0.012, 1.222 ], [ 0.08, 1.24 ], [ 0.2, 1.26 ], [ 0.29, 1.29 ], [ 0.3, 1.3 ], [ 0.36, 1.58 ], [ 0.415, 1.84 ], [ 0.45, 1.92 ], [ 0.55, 1.948 ], [ 0.9, 1.94 ], [ 0.965, 1.925 ], [ 0.985, 1.89 ], [ 0.993, 1.86 ], [ 1, 1.82 ] ],
+		belt: [ [ 0, 1.16 ], [ 0.3, 1.3 ], [ 0.95, 1.33 ], [ 1, 1.32 ] ],
+		dloTop: [ [ 0.3, 1.85 ], [ 0.6, 1.86 ], [ 0.95, 1.85 ], [ 1, 1.82 ] ],
+		bottom: [ [ 0, 0.48 ], [ 0.012, 0.42 ], [ 0.06, 0.33 ], [ 0.94, 0.33 ], [ 0.985, 0.42 ], [ 1, 0.47 ] ],
+		halfW: [ [ 0, 0.98 ], [ 0.006, 1.005 ], [ 0.02, 1.022 ], [ 0.08, 1.03 ], [ 0.9, 1.03 ], [ 0.98, 1.025 ], [ 0.995, 1.0 ], [ 1, 0.97 ] ],
+		roofW: [ [ 0, 0.88 ], [ 0.5, 0.9 ], [ 1, 0.88 ] ],
+		shape: { bulge: 0.006, glassInset: 0.03 },
+		windshield: [ 0.3, 0.43 ], rearGlass: [ 2, 2 ], sideGlass: [ 0.33, 0.95 ],
+		pillars: [ [ 0.535, 0.555 ], [ 0.745, 0.765 ] ],
+		head: null, tail: null, grille: { u: [ 0, 0.015 ], y: [ 0.56, 1.12 ], x: 0.6, chrome: false },
+		beltChrome: true, dloChrome: true, handles: 'chrome', privacyGlass: true,
+		rim: { spokes: 12, dark: false },
+		details: [
+			// front: big chrome-framed jewel grille, slim headlamps, vertical light bars down the corners
+			{ type: 'grille', at: 'front', x: 0.6, y: [ 0.57, 1.11 ], pattern: 'diamond', frame: 'chrome' },
+			{ type: 'lamp', at: 'front', x: [ 0.63, 0.93 ], y: [ 1.03, 1.1 ], kind: 'head' },
+			{ type: 'lamp', at: 'front', x: [ 0.885, 0.93 ], y: [ 0.55, 1.02 ], kind: 'drl' },
+			{ type: 'bar', at: 'front', x: 0.66, y: [ 0.48, 0.555 ], mat: 'gloss' },
+			// rear: tall taillights up the corners, glass, chrome bar across the tailgate
+			{ type: 'lamp', at: 'rear', x: [ 0.85, 0.95 ], y: [ 0.95, 1.78 ], kind: 'tail' },
+			{ type: 'window', at: 'rear', x: 0.74, y: [ 1.42, 1.78 ] },
+			{ type: 'bar', at: 'rear', x: 0.56, y: [ 1.06, 1.1 ], mat: 'chrome' },
+			{ type: 'bar', at: 'rear', x: 0.9, y: [ 0.47, 0.6 ], mat: 'gloss' },
+			// sides: door shut lines, chrome strip low on the doors, running boards
+			{ type: 'seam', u: 0.285 }, { type: 'seam', u: 0.53 }, { type: 'seam', u: 0.73 },
+			{ type: 'strip', u: [ 0.29, 0.72 ], y: 0.52, h: 0.022, mat: 'chrome' },
+			{ type: 'board', u: [ 0.28, 0.69 ], y: 0.36 },
+		],
+		eye: { x: - 0.42, y: 1.68, u: 0.5 }, maxFwd: 28, steerMax: 0.52,
 	},
 };
 
@@ -141,8 +172,9 @@ export function carMaterials( { paint = 0x1f3b33, glassOpacity = 0.55 } = {} ) {
 
 	const tm = { toneMapped: false };
 	return {
-		paint: new THREE.MeshPhysicalMaterial( { color: paint, metalness: 0.3, roughness: 0.38, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 0.7, ...tm } ),
-		glass: new THREE.MeshPhysicalMaterial( { color: 0x1a2329, roughness: 0.04, metalness: 0.1, envMapIntensity: 1.4, transparent: true, opacity: glassOpacity, side: THREE.DoubleSide, depthWrite: false, ...tm } ),
+		// paint is tone mapped so light colours keep their shading instead of clipping to flat white
+		paint: new THREE.MeshPhysicalMaterial( { color: paint, metalness: 0.3, roughness: 0.38, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 0.7, toneMapped: true } ),
+		glass: new THREE.MeshPhysicalMaterial( { color: 0x10161a, roughness: 0.04, metalness: 0.1, envMapIntensity: 1.0, transparent: true, opacity: glassOpacity, side: THREE.DoubleSide, depthWrite: false, ...tm } ),
 		trim: new THREE.MeshStandardMaterial( { color: 0x0d0e10, roughness: 0.45, ...tm } ),
 		chrome: new THREE.MeshStandardMaterial( { color: 0xe4e6e8, roughness: 0.12, metalness: 1, ...tm } ),
 		grille: new THREE.MeshStandardMaterial( { color: 0x101113, roughness: 0.55, metalness: 0.3, ...tm } ),
@@ -151,7 +183,13 @@ export function carMaterials( { paint = 0x1f3b33, glassOpacity = 0.55 } = {} ) {
 		rubber: new THREE.MeshStandardMaterial( { color: 0x151515, roughness: 0.9, ...tm } ),
 		rim: new THREE.MeshStandardMaterial( { color: 0xc7cbd0, roughness: 0.25, metalness: 0.95, ...tm } ),
 		dark: new THREE.MeshStandardMaterial( { color: 0x1b1c1e, roughness: 0.8, side: THREE.DoubleSide, ...tm } ),
-		gloss: new THREE.MeshPhysicalMaterial( { color: 0x08090a, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04, ...tm } ),
+		gloss: new THREE.MeshPhysicalMaterial( { color: 0x050506, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 0.35, ...tm } ),
+		lens: new THREE.MeshPhysicalMaterial( { color: 0x0a0b0c, roughness: 0.05, metalness: 0.3, clearcoat: 1, ...tm } ),
+		ledWhite: new THREE.MeshBasicMaterial( { color: 0xf2f6ff, ...tm } ),
+		ledRed: new THREE.MeshBasicMaterial( { color: 0xd01822, ...tm } ),
+		red: new THREE.MeshPhysicalMaterial( { color: 0x7a0c12, roughness: 0.2, clearcoat: 1, ...tm } ),
+		rimDark: new THREE.MeshStandardMaterial( { color: 0x2b2d30, roughness: 0.35, metalness: 0.9, ...tm } ),
+		ventInner: new THREE.MeshStandardMaterial( { color: 0x6a6f76, roughness: 0.3, metalness: 0.9, ...tm } ),
 		shadow: new THREE.MeshBasicMaterial( { map: shadowTexture(), color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: - 2, ...tm } ),
 	};
 
@@ -177,11 +215,15 @@ export function shadowTexture() {
 
 // ---------------------------------------------------------------- the swept body
 
-const K = 23; // points in each half cross-section
+const N_SIDE = 16; // points up the body side
+const K = 14 + N_SIDE; // points in each half cross-section
+const BELT = 3 + N_SIDE; // band index of the waist seal
 // band k lies between point k and k+1
-const BAND = k => ( k <= 2 ? 'under' : k <= 11 ? 'side' : k === 12 ? 'belt' : k <= 16 ? 'window' : k === 17 ? 'rail' : 'roof' );
+const BAND = k => ( k <= 2 ? 'under' : k < BELT ? 'side' : k === BELT ? 'belt' : k <= BELT + 4 ? 'window' : k === BELT + 5 ? 'rail' : 'roof' );
 
-function section( yb, yt, belt, w, wr ) {
+function section( yb, yt, belt, w, wr, shape = {} ) {
+
+	const bulge = shape.bulge ?? 0.012, inset = shape.glassInset ?? w * 0.025;
 
 	const P = [];
 	// underside to the lower edge of the sill
@@ -191,16 +233,16 @@ function section( yb, yt, belt, w, wr ) {
 	const ye = Math.min( belt, yt - 0.1 );
 	const ys = yb + 0.12;
 	const yTop = Math.max( ys + 0.01, ye );
-	for ( let j = 0; j < 9; j ++ ) {
+	for ( let j = 0; j < N_SIDE; j ++ ) {
 
-		const t = j / 8;
-		P.push( [ w * ( 0.985 + Math.sin( Math.PI * t ) * 0.012 ), ys + ( yTop - ys ) * t ] );
+		const t = j / ( N_SIDE - 1 );
+		P.push( [ w * ( 0.985 + Math.sin( Math.PI * t ) * bulge ), ys + ( yTop - ys ) * t ] );
 
 	}
 
 	// window side (or the hood's shoulder where there is no window)
 	const topX = THREE.MathUtils.lerp( w - 0.06, wr, g );
-	const x0 = w * 0.975;
+	const x0 = w - inset;
 	for ( let j = 1; j <= 5; j ++ ) {
 
 		const t = j / 5;
@@ -225,6 +267,7 @@ function section( yb, yt, belt, w, wr ) {
 function sweptBody( def, length, mats, wheelsZ, S = 160 ) {
 
 	const top = curve( def.top ), belt = curve( def.belt ), bottom = curve( def.bottom );
+	const dloTop = def.dloTop ? curve( def.dloTop ) : null;
 	const halfW = curve( def.halfW ), roofW = curve( def.roofW );
 	const z0 = - def.L / 2;
 
@@ -235,7 +278,7 @@ function sweptBody( def, length, mats, wheelsZ, S = 160 ) {
 		const lin = i / S;
 		const u = 0.5 * lin + 0.5 * ( 0.5 - 0.5 * Math.cos( Math.PI * lin ) ); // a little denser at the ends, where the shape turns
 		const yt = top( u ), w = halfW( u );
-		const { P, g } = section( bottom( u ), yt, belt( u ), w, Math.min( roofW( u ), w - 0.05 ) );
+		const { P, g } = section( bottom( u ), yt, belt( u ), w, Math.min( roofW( u ), w - 0.05 ), def.shape );
 		stations.push( { u, z: z0 + u * length, P, g, belt: belt( u ), yt, w } );
 
 	}
@@ -301,12 +344,13 @@ function sweptBody( def, length, mats, wheelsZ, S = 160 ) {
 
 		const band = BAND( k );
 		// wheel openings: leave holes in the body side
-		if ( k >= 2 && k <= 12 && wheelsZ.some( wz => ( cz - wz ) ** 2 + ( cy - def.wheelR ) ** 2 < ( def.wheelR + 0.075 ) ** 2 ) ) continue;
+		if ( k >= 2 && k <= BELT && wheelsZ.some( wz => ( cz - wz ) ** 2 + ( cy - def.wheelR ) ** 2 < ( def.wheelR + 0.075 ) ** 2 ) ) continue;
 
 		let mat = mats.paint;
 		const greenhouse = ( st.g + st2.g ) / 2 > 0.5;
 		const w = ( st.w + st2.w ) / 2;
 		if ( band === 'under' ) mat = mats.dark;
+		else if ( band === 'side' && def.sillTrim && cy < def.sillTrim ) mat = mats.gloss; // dark lower sill
 		else if ( ( u < 0.06 || u > 0.94 ) && cy < Math.min( st.yt, st2.yt ) * 0.42 && ax < w - 0.12 ) mat = mats.trim; // lower bumper valance
 		if ( inRange( u, def.grille.u ) && inRange( cy, def.grille.y ) && ax < def.grille.x ) mat = def.grille.chrome ? mats.chrome : mats.grille;
 		if ( band !== 'roof' && rects( def.blackout ).some( r => inRect( r, u, cy, ax ) ) ) mat = mats.gloss;
@@ -317,9 +361,11 @@ function sweptBody( def, length, mats, wheelsZ, S = 160 ) {
 		else if ( def.roofBlack && greenhouse && ( band === 'roof' || band === 'rail' ) ) mat = mats.gloss; // contrast roof
 		else if ( greenhouse ) {
 
+			const surround = def.dloChrome ? mats.chrome : def.roofBlack ? mats.gloss : mats.trim;
 			if ( band === 'belt' ) mat = def.beltChrome ? mats.chrome : mats.trim; // window seal along the belt line
+			else if ( band === 'window' && dloTop && cy > dloTop( u ) ) mat = surround; // above the glass: the roof rail
 			else if ( band === 'window' && inRange( u, def.sideGlass ) ) mat = def.pillars.some( r => inRange( u, r ) ) ? mats.trim : mats.glass;
-			else if ( band === 'rail' && ( inRange( u, def.windshield ) || inRange( u, def.sideGlass ) ) ) mat = mats.trim; // pillars and drip rail
+			else if ( band === 'rail' && ( inRange( u, def.windshield ) || inRange( u, def.sideGlass ) ) ) mat = surround; // pillars and drip rail
 
 		}
 
@@ -327,24 +373,25 @@ function sweptBody( def, length, mats, wheelsZ, S = 160 ) {
 
 	}
 
-	// close the ends
+	// close the ends with horizontal strips across the face (a fan from the
+	// centre would turn any coloured band into a big wedge)
 	for ( const [ i, flip ] of [ [ 0, false ], [ S, true ] ] ) {
 
 		const st = stations[ i ];
-		const center = new THREE.Vector3( 0, ( st.P[ 0 ][ 1 ] + st.yt ) / 2, st.z );
 		const n = new THREE.Vector3( 0, 0, flip ? 1 : - 1 );
-		for ( let c = 0; c < cols - 1; c ++ ) {
+		for ( let k = 0; k < K - 1; k ++ ) {
 
-			const a = pos[ idx( i, c ) ], b = pos[ idx( i, c + 1 ) ];
-			const cy = ( a.y + b.y ) / 2;
-			let mat = cy < st.P[ 0 ][ 1 ] + 0.12 ? mats.trim : mats.paint;
-			if ( def.grille && i === 0 && inRange( cy, def.grille.y ) ) mat = def.grille.chrome ? mats.chrome : mats.grille;
+			const [ xa, ya ] = st.P[ k ], [ xb, yb ] = st.P[ k + 1 ];
+			const cy = ( ya + yb ) / 2;
+			let mat = BAND( k ) === 'under' ? mats.dark : mats.paint;
+			if ( ! def.details && cy < st.P[ 0 ][ 1 ] + 0.12 ) mat = mats.trim;
 			if ( ! out.has( mat ) ) out.set( mat, { p: [], n: [] } );
 			const o = out.get( mat );
-			const tri = flip ? [ center, a, b ] : [ center, b, a ];
-			for ( const v of tri ) {
+			const A = [ xa, ya, st.z ], B = [ xb, yb, st.z ], A2 = [ - xa, ya, st.z ], B2 = [ - xb, yb, st.z ];
+			const tris = flip ? [ A2, A, B, A2, B, B2 ] : [ A2, B, A, A2, B2, B ];
+			for ( const v of tris ) {
 
-				o.p.push( v.x, v.y, v.z );
+				o.p.push( ...v );
 				o.n.push( n.x, n.y, n.z );
 
 			}
@@ -363,7 +410,23 @@ function sweptBody( def, length, mats, wheelsZ, S = 160 ) {
 
 	}
 
-	return { meshes, top, belt, halfW };
+	// half cross-section at u, and the body side's x at height y
+	const sectionAt = u => section( bottom( u ), top( u ), belt( u ), halfW( u ), Math.min( roofW( u ), halfW( u ) - 0.05 ), def.shape ).P;
+	const xAt = ( u, y ) => {
+
+		const P = sectionAt( u );
+		for ( let k = 3; k < BELT + 5; k ++ ) {
+
+			const [ x0, y0 ] = P[ k ], [ x1, y1 ] = P[ k + 1 ];
+			if ( y >= y0 && y <= y1 ) return x0 + ( x1 - x0 ) * ( ( y - y0 ) / Math.max( 1e-6, y1 - y0 ) );
+
+		}
+
+		return halfW( u );
+
+	};
+
+	return { meshes, top, belt, bottom, halfW, sectionAt, xAt };
 
 }
 
@@ -385,17 +448,22 @@ function wheelModel( def, mats ) {
 	const disc = new THREE.Mesh( new THREE.CylinderGeometry( rr * 0.8, rr * 0.8, 0.025, 24 ).rotateZ( Math.PI / 2 ), mats.grille );
 	disc.position.x = - 0.02;
 	spin.add( disc );
-	for ( let i = 0; i < 5; i ++ ) {
+	const n = def.rim?.spokes || 5;
+	const rimMat = def.rim?.dark ? mats.rimDark : mats.rim;
+	lip.material = rimMat;
+	const spokeW = Math.min( 0.035, 0.16 / n * 1.1 );
+	for ( let i = 0; i < n; i ++ ) {
 
-		const s = new THREE.Mesh( new THREE.BoxGeometry( 0.035, rr * 0.92, 0.05 ), mats.rim );
+		// many-spoke rims taper toward the rim; pairs lean slightly to read as split spokes
+		const s = new THREE.Mesh( new THREE.BoxGeometry( spokeW, rr * 0.92, 0.045 ), rimMat );
 		s.geometry.translate( 0, rr * 0.46, 0 );
-		s.rotation.x = i / 5 * Math.PI * 2;
+		s.rotation.x = i / n * Math.PI * 2 + ( n >= 12 ? ( i % 2 ? 0.05 : - 0.05 ) : 0 );
 		s.position.x = w * 0.36;
 		spin.add( s );
 
 	}
 
-	const hub = new THREE.Mesh( new THREE.CylinderGeometry( 0.055, 0.06, 0.05, 16 ).rotateZ( Math.PI / 2 ), mats.rim );
+	const hub = new THREE.Mesh( new THREE.CylinderGeometry( 0.055, 0.06, 0.05, 16 ).rotateZ( Math.PI / 2 ), rimMat );
 	hub.position.x = w * 0.38;
 	spin.add( hub );
 	return spin;
@@ -476,7 +544,7 @@ function pickupBed( def, mats, rearWheelZ ) {
 export function buildCarModel( typeKey, { paint, interior = false, glassOpacity, detail = 160 } = {} ) {
 
 	const def = CAR_TYPES[ typeKey ];
-	const mats = carMaterials( { paint, glassOpacity: glassOpacity ?? ( interior ? 0.28 : 0.55 ) } );
+	const mats = carMaterials( { paint, glassOpacity: glassOpacity ?? ( interior ? ( def.privacyGlass ? 0.4 : 0.28 ) : def.privacyGlass ? 0.82 : 0.55 ) } );
 	const root = new THREE.Group();
 	const body = new THREE.Group();
 	root.add( body );
@@ -550,13 +618,13 @@ export function buildCarModel( typeKey, { paint, interior = false, glassOpacity,
 		const arm = new THREE.Mesh( new RoundedBoxGeometry( 0.14, 0.04, 0.06, 2, 0.015 ), mats.trim );
 		arm.position.set( s * ( swept.halfW( uMirror ) + 0.02 ), ym, zm );
 		body.add( arm );
-		const head = new THREE.Mesh( new RoundedBoxGeometry( 0.1, 0.13, 0.17, 2, 0.04 ), mats.paint );
+		const head = new THREE.Mesh( new RoundedBoxGeometry( 0.1, 0.13, 0.17, 2, 0.04 ), def.mirrorBlack ? mats.gloss : mats.paint );
 		head.position.set( s * ( swept.halfW( uMirror ) + 0.11 ), ym + 0.02, zm + 0.03 );
 		body.add( head );
 		for ( const u of [ 0.47, 0.64 ] ) {
 
 			const uu = def.cabLength ? 0.55 + ( u - 0.47 ) * 1.5 : u;
-			const handle = new THREE.Mesh( new RoundedBoxGeometry( 0.02, 0.03, 0.15, 2, 0.008 ), mats.chrome );
+			const handle = new THREE.Mesh( new RoundedBoxGeometry( 0.02, 0.03, 0.15, 2, 0.008 ), def.handles === 'paint' ? mats.paint : mats.chrome );
 			handle.position.set( s * ( swept.halfW( uu ) - 0.0 ), swept.belt( uu ) - 0.09, - def.L / 2 + uu * length );
 			body.add( handle );
 
@@ -585,9 +653,256 @@ export function buildCarModel( typeKey, { paint, interior = false, glassOpacity,
 	shadow.renderOrder = 1;
 	root.add( shadow );
 
+	if ( def.details ) addDetails( def, body, swept, mats, length );
+
 	const model = { root, body, wheels, def, mats, shadow };
 	if ( interior ) addInterior( model, swept, length );
 	return model;
+
+}
+
+// ---------------------------------------------------------------- details
+// Grilles, lamps, vents, seams and trim built as real parts sitting on the body,
+// instead of painted patches.
+
+const _patterns = {};
+function grilleTexture( pattern ) {
+
+	if ( _patterns[ pattern ] ) return _patterns[ pattern ];
+	const c = document.createElement( 'canvas' );
+	c.width = 512;
+	c.height = 256;
+	const g = c.getContext( '2d' );
+	g.fillStyle = '#050505';
+	g.fillRect( 0, 0, 512, 256 );
+	if ( pattern === 'diamond' ) {
+
+		// a field of small faceted chrome diamonds
+		const s = 22;
+		for ( let y = - s; y < 256 + s; y += s ) {
+
+			for ( let x = - s; x < 512 + s; x += s ) {
+
+				const ox = ( ( y / s ) % 2 ) * s / 2;
+				const cx = x + ox, cy = y;
+				const grad = g.createLinearGradient( cx, cy - s / 2, cx, cy + s / 2 );
+				grad.addColorStop( 0, '#f2f2f2' );
+				grad.addColorStop( 0.5, '#9a9a9a' );
+				grad.addColorStop( 1, '#d0d0d0' );
+				g.fillStyle = grad;
+				g.beginPath();
+				g.moveTo( cx, cy - s * 0.42 );
+				g.lineTo( cx + s * 0.4, cy );
+				g.lineTo( cx, cy + s * 0.42 );
+				g.lineTo( cx - s * 0.4, cy );
+				g.closePath();
+				g.fill();
+
+			}
+
+		}
+
+	} else {
+
+		// a fine dark hexagonal mesh with lit upper edges
+		const r = 9;
+		const h = Math.sqrt( 3 ) * r;
+		g.lineWidth = 2.5;
+		for ( let row = 0, y = 0; y < 256 + h; row ++, y += h / 2 ) {
+
+			for ( let x = ( row % 2 ) * r * 1.5; x < 512 + r * 2; x += r * 3 ) {
+
+				g.beginPath();
+				for ( let i = 0; i <= 6; i ++ ) {
+
+					const a = Math.PI / 3 * i;
+					const px = x + r * Math.cos( a ), py = y + r * Math.sin( a );
+					if ( i === 0 ) g.moveTo( px, py );
+					else g.lineTo( px, py );
+
+				}
+
+				g.strokeStyle = '#3a3d41';
+				g.stroke();
+
+			}
+
+		}
+
+	}
+
+	const tex = new THREE.CanvasTexture( c );
+	tex.colorSpace = THREE.SRGBColorSpace;
+	tex.anisotropy = 4;
+	_patterns[ pattern ] = tex;
+	return tex;
+
+}
+
+function addDetails( def, body, swept, mats, length ) {
+
+	const z0 = - def.L / 2, z1 = z0 + length;
+	const box = ( w, h, d, r, mat ) => new THREE.Mesh( new RoundedBoxGeometry( w, h, d, 2, Math.min( r, w / 2.01, h / 2.01, d / 2.01 ) ), mat );
+	const span = v => ( Array.isArray( v ) ? v : [ - v, v ] );
+	const onEnd = ( at, mesh, x, y, depth ) => {
+
+		mesh.position.set( x, y, at === 'front' ? z0 - depth / 2 + 0.002 : z1 + depth / 2 - 0.002 );
+		body.add( mesh );
+		return mesh;
+
+	};
+
+	for ( const d of def.details ) {
+
+		if ( d.type === 'grille' ) {
+
+			const [ x0, x1 ] = span( d.x ), [ y0, y1 ] = d.y;
+			const w = x1 - x0, h = y1 - y0, cx = ( x0 + x1 ) / 2, cy = ( y0 + y1 ) / 2;
+			const tex = grilleTexture( d.pattern ).clone();
+			tex.repeat.set( w / 1.2, h / 0.6 );
+			tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+			tex.needsUpdate = true;
+			const metal = d.pattern === 'diamond';
+			const insert = new THREE.Mesh( new THREE.PlaneGeometry( w, h ), new THREE.MeshStandardMaterial( {
+				map: tex, metalness: metal ? 1 : 0.6, roughness: metal ? 0.18 : 0.45, toneMapped: false,
+			} ) );
+			insert.rotation.y = Math.PI; // face forward (-z)
+			insert.position.set( cx, cy, z0 - 0.012 );
+			insert.userData.noInstance = false;
+			body.add( insert );
+			if ( d.frame ) {
+
+				const fm = mats[ d.frame ];
+				const t = 0.022;
+				onEnd( 'front', box( w + t * 2, t, 0.03, 0.01, fm ), cx, y1 + t / 2, 0.03 );
+				onEnd( 'front', box( w + t * 2, t, 0.03, 0.01, fm ), cx, y0 - t / 2, 0.03 );
+				onEnd( 'front', box( t, h, 0.03, 0.01, fm ), x0 - t / 2, cy, 0.03 );
+				onEnd( 'front', box( t, h, 0.03, 0.01, fm ), x1 + t / 2, cy, 0.03 );
+
+			}
+
+		} else if ( d.type === 'lamp' ) {
+
+			const [ x0, x1 ] = d.x, [ y0, y1 ] = d.y;
+			const w = x1 - x0, h = y1 - y0;
+			for ( const s of [ - 1, 1 ] ) {
+
+				const cx = s * ( x0 + x1 ) / 2, cy = ( y0 + y1 ) / 2;
+				onEnd( d.at, box( w, h, 0.035, 0.012, mats.lens ), cx, cy, 0.035 );
+				const led = d.kind === 'tail' ? mats.ledRed : mats.ledWhite;
+				const out = d.at === 'front' ? - 0.037 : 0.037; // on the face of the lens
+				const strip = ( sw, sh, sx, sy ) => {
+
+					const m = new THREE.Mesh( new THREE.BoxGeometry( sw, sh, 0.006 ), led );
+					m.position.set( sx, sy, ( d.at === 'front' ? z0 : z1 ) + out );
+					body.add( m );
+
+				};
+
+				if ( d.kind === 'head' ) {
+
+					strip( w * 0.92, 0.012, cx, y1 - 0.016 ); // signature light line along the top
+					const refl = box( w * 0.3, h * 0.45, 0.008, 0.008, mats.chrome );
+					refl.position.set( cx + s * w * 0.2, cy - h * 0.14, ( d.at === 'front' ? z0 : z1 ) + out * 0.97 );
+					body.add( refl );
+
+				} else if ( d.kind === 'drl' ) {
+
+					strip( 0.014, h * 0.94, cx, cy );
+
+				} else {
+
+					// layered tail lamp: an outer light pipe and two inner bars
+					strip( 0.012, h * 0.92, cx + s * w * 0.35, cy );
+					strip( 0.008, h * 0.7, cx - s * w * 0.05, cy );
+					strip( w * 0.6, 0.008, cx, y1 - 0.03 );
+
+				}
+
+			}
+
+		} else if ( d.type === 'bar' ) {
+
+			const [ x0, x1 ] = span( d.x ), [ y0, y1 ] = d.y;
+			onEnd( d.at, box( x1 - x0, y1 - y0, 0.03, 0.01, mats[ d.mat ] ), ( x0 + x1 ) / 2, ( y0 + y1 ) / 2, 0.03 );
+
+		} else if ( d.type === 'window' ) {
+
+			const [ x0, x1 ] = span( d.x ), [ y0, y1 ] = d.y;
+			onEnd( d.at, box( x1 - x0, y1 - y0, 0.02, 0.03, mats.glass ), ( x0 + x1 ) / 2, ( y0 + y1 ) / 2, 0.02 );
+
+		} else if ( d.type === 'vent' ) {
+
+			const [ u0, u1 ] = d.u, [ y0, y1 ] = d.y;
+			const um = ( u0 + u1 ) / 2, ym = ( y0 + y1 ) / 2, zl = ( u1 - u0 ) * length;
+			for ( const s of [ - 1, 1 ] ) {
+
+				const x = swept.xAt( um, ym );
+				const frame = box( 0.02, y1 - y0, zl, 0.02, mats.gloss );
+				frame.position.set( s * ( x + 0.004 ), ym, z0 + um * length );
+				body.add( frame );
+				const inner = box( 0.012, ( y1 - y0 ) * 0.86, zl * 0.45, 0.006, mats.ventInner );
+				inner.position.set( s * ( x + 0.012 ), ym - 0.01, z0 + um * length - zl * 0.12 );
+				body.add( inner );
+
+			}
+
+		} else if ( d.type === 'seam' ) {
+
+			// a thin dark shut line following the body side from sill to waist
+			const P = swept.sectionAt( d.u );
+			const z = z0 + d.u * length;
+			for ( const s of [ - 1, 1 ] ) {
+
+				const pts = [];
+				for ( let k = 3; k <= BELT; k ++ ) pts.push( [ P[ k ][ 0 ] + 0.002, P[ k ][ 1 ] ] );
+				const pos = [];
+				for ( let k = 0; k < pts.length - 1; k ++ ) {
+
+					const [ xa, ya ] = pts[ k ], [ xb, yb ] = pts[ k + 1 ];
+					const q = [ [ xa, ya, z - 0.003 ], [ xb, yb, z - 0.003 ], [ xb, yb, z + 0.003 ], [ xa, ya, z + 0.003 ] ].map( ( [ x, y, zz ] ) => [ s * x, y, zz ] );
+					const tri = s > 0 ? [ q[ 0 ], q[ 2 ], q[ 1 ], q[ 0 ], q[ 3 ], q[ 2 ] ] : [ q[ 0 ], q[ 1 ], q[ 2 ], q[ 0 ], q[ 2 ], q[ 3 ] ];
+					for ( const v of tri ) pos.push( ...v );
+
+				}
+
+				const g = new THREE.BufferGeometry();
+				g.setAttribute( 'position', new THREE.Float32BufferAttribute( pos, 3 ) );
+				g.computeVertexNormals();
+				body.add( new THREE.Mesh( g, mats.dark ) );
+
+			}
+
+		} else if ( d.type === 'strip' ) {
+
+			const [ u0, u1 ] = d.u;
+			const x = Math.max( swept.xAt( u0, d.y ), swept.xAt( ( u0 + u1 ) / 2, d.y ), swept.xAt( u1, d.y ) );
+			for ( const s of [ - 1, 1 ] ) {
+
+				const m = box( 0.012, d.h, ( u1 - u0 ) * length, 0.005, mats[ d.mat ] );
+				m.position.set( s * ( x + 0.004 ), d.y, z0 + ( u0 + u1 ) / 2 * length );
+				body.add( m );
+
+			}
+
+		} else if ( d.type === 'board' ) {
+
+			const [ u0, u1 ] = d.u;
+			const x = swept.halfW( ( u0 + u1 ) / 2 );
+			for ( const s of [ - 1, 1 ] ) {
+
+				const m = box( 0.2, 0.045, ( u1 - u0 ) * length, 0.015, mats.gloss );
+				m.position.set( s * ( x - 0.04 ), d.y, z0 + ( u0 + u1 ) / 2 * length );
+				body.add( m );
+				const edge = box( 0.012, 0.02, ( u1 - u0 ) * length, 0.005, mats.chrome );
+				edge.position.set( s * ( x + 0.06 ), d.y + 0.01, z0 + ( u0 + u1 ) / 2 * length );
+				body.add( edge );
+
+			}
+
+		}
+
+	}
 
 }
 
