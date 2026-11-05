@@ -6,7 +6,7 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { buildCar } from './vehicles.js';
+import { buildCarModel, CAR_TYPES, CAR_TYPE_KEYS, shadowTexture } from './carmodels.js';
 import { fetchOverpass } from './osm.js';
 
 const DRIVE = new Set( [ 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link', 'unclassified', 'residential', 'living_street' ] );
@@ -28,17 +28,40 @@ const HIDDEN = new THREE.Matrix4().makeScale( 0, 0, 0 );
 
 // ---------------------------------------------------------------- instanced car
 
-function instancedCars( count ) {
+function instancedCars( type, count ) {
 
-	const model = buildCar();
+	const model = buildCarModel( type, { paint: 0xffffff, detail: 80 } ); // lighter body for traffic
 	model.root.updateMatrixWorld( true );
 	const byMat = new Map();
 	model.root.traverse( o => {
 
-		if ( ! o.isMesh || o.material.map ) return; // skip the dashboard screen
+		if ( ! o.isMesh || o.userData.noInstance ) return;
 		let g = o.geometry.clone().applyMatrix4( o.matrixWorld );
-		for ( const k of Object.keys( g.attributes ) ) if ( k !== 'position' && k !== 'normal' ) g.deleteAttribute( k );
+		for ( const k of Object.keys( g.attributes ) ) if ( k !== 'position' && k !== 'normal' && ! ( k === 'uv' && o.material.map ) ) g.deleteAttribute( k );
 		if ( g.index ) g = g.toNonIndexed();
+		if ( ! g.attributes.uv && o.material.map ) return;
+		if ( o.matrixWorld.determinant() < 0 ) {
+
+			// mirrored parts (left-hand wheels): restore the triangle winding
+			for ( const name of Object.keys( g.attributes ) ) {
+
+				const a = g.attributes[ name ];
+				for ( let i = 0; i < a.count; i += 3 ) {
+
+					for ( let c = 0; c < a.itemSize; c ++ ) {
+
+						const t = a.array[ ( i + 1 ) * a.itemSize + c ];
+						a.array[ ( i + 1 ) * a.itemSize + c ] = a.array[ ( i + 2 ) * a.itemSize + c ];
+						a.array[ ( i + 2 ) * a.itemSize + c ] = t;
+
+					}
+
+				}
+
+			}
+
+		}
+
 		if ( ! byMat.has( o.material ) ) byMat.set( o.material, [] );
 		byMat.get( o.material ).push( g );
 
@@ -48,19 +71,48 @@ function instancedCars( count ) {
 	let paint = null;
 	for ( const [ mat, geos ] of byMat ) {
 
-		const m = mat.clone();
-		const isPaint = mat.isMeshPhysicalMaterial && mat.clearcoat > 0 && ! mat.transparent;
-		if ( isPaint ) m.color.set( 0xffffff );
-		const im = new THREE.InstancedMesh( mergeGeometries( geos ), m, count );
+		// all parts that share a material must have the same attributes to merge
+		const keys = Object.keys( geos[ 0 ].attributes ).sort().join();
+		const usable = geos.filter( g => Object.keys( g.attributes ).sort().join() === keys );
+		const im = new THREE.InstancedMesh( mergeGeometries( usable ), mat, count );
 		im.frustumCulled = false;
 		im.instanceMatrix.setUsage( THREE.DynamicDrawUsage );
 		for ( let i = 0; i < count; i ++ ) im.setMatrixAt( i, HIDDEN );
-		if ( isPaint ) paint = im;
+		if ( mat === model.mats.paint ) {
+
+			paint = im;
+			for ( let i = 0; i < count; i ++ ) im.setColorAt( i, new THREE.Color( 1, 1, 1 ) );
+
+		}
+
 		meshes.push( im );
 
 	}
 
-	return { meshes, paint };
+	return { meshes, paint, def: model.def };
+
+}
+
+// common car colours on American roads: white, black, greys and silver lead
+const CAR_COLOURS = [
+	[ 0xf2f2ee, 25 ], [ 0x111214, 20 ], [ 0x5c5f63, 17 ], [ 0xb8bcc2, 12 ], [ 0x1f3550, 9 ],
+	[ 0x8e1c1c, 9 ], [ 0x1f3b33, 3 ], [ 0x7fb6b3, 2 ], [ 0x6b5b45, 3 ],
+];
+function pickColour() {
+
+	let r = Math.random() * 100;
+	for ( const [ c, w ] of CAR_COLOURS ) if ( ( r -= w ) <= 0 ) return c;
+	return CAR_COLOURS[ 0 ][ 0 ];
+
+}
+
+// what's on the road: plenty of SUVs and pickups in the Lowcountry
+const TYPE_MIX = [ [ 'sedan', 40 ], [ 'suv', 38 ], [ 'pickup', 22 ] ];
+function pickType() {
+
+	let r = Math.random() * 100;
+	for ( const [ t, w ] of TYPE_MIX ) if ( ( r -= w ) <= 0 ) return t;
+	return 'sedan';
 
 }
 
@@ -108,7 +160,22 @@ function instancedPeople( count ) {
 	const legGeo = new THREE.CapsuleGeometry( 0.068, 0.72, 4, 8 ).translate( 0, - 0.42, 0 );
 	const shoeGeo = new THREE.BoxGeometry( 0.1, 0.07, 0.25 ).translate( 0, - 0.84, - 0.04 );
 
+	const shadow = new THREE.InstancedMesh(
+		new THREE.PlaneGeometry( 0.75, 0.75 ).rotateX( - Math.PI / 2 ),
+		new THREE.MeshBasicMaterial( { map: shadowTexture(), color: 0x000000, transparent: true, opacity: 0.45, depthWrite: false, polygonOffset: true, polygonOffsetFactor: - 2, toneMapped: false } ),
+		count,
+	);
+	shadow.frustumCulled = false;
+	shadow.instanceMatrix.setUsage( THREE.DynamicDrawUsage );
+	for ( let i = 0; i < count; i ++ ) {
+
+		shadow.setMatrixAt( i, HIDDEN );
+		shadow.setColorAt( i, new THREE.Color( 1, 1, 1 ) );
+
+	}
+
 	return {
+		shadow,
 		torso: make( torsoGeo, count ),
 		head: make( headGeo, count ),
 		hair: make( hairGeo, count ),
@@ -140,8 +207,13 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 	let walkAdj = []; // node -> walk segment indices
 	let crossingNodes = null;
 
-	const carMeshes = instancedCars( MAX_CARS );
-	for ( const m of carMeshes.meshes ) group.add( m );
+	const carMeshes = {};
+	for ( const t of CAR_TYPE_KEYS ) {
+
+		carMeshes[ t ] = instancedCars( t, MAX_CARS );
+		for ( const m of carMeshes[ t ].meshes ) group.add( m );
+
+	}
 	const people = instancedPeople( MAX_PEDS );
 	for ( const m of Object.values( people ) ) group.add( m );
 
@@ -352,13 +424,14 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 			if ( cars.some( c => c.active && Math.hypot( c.x - _p.x, c.z - _p.z ) < 15 ) ) continue;
 			const y = groundAt( _p.x, _p.z, player.feet.y + 60, 200 );
 			if ( y === null ) continue;
+			const type = pickType();
+			car.type = type;
 			Object.assign( car, {
 				active: true, route: [ li ], s, x: _p.x, z: _p.z, y,
 				yaw: Math.atan2( - L.dx, - L.dz ), speed: L.speed * 0.6, waited: 0, honkAt: 0,
 				bumped: 0, groundTimer: Math.random() * 0.3,
 			} );
-			carMeshes.paint.setColorAt( car.slot, new THREE.Color( pick( [ 0x1f3b33, 0x7fb6b3, 0xb5523f, 0xe9dfc8, 0x1b1d22, 0x6b1f2a, 0xc9ccd1, 0x2c4a7a, 0xf3f1ea, 0x58595b ] ) ) );
-			carMeshes.paint.instanceColor.needsUpdate = true;
+			car.colour = new THREE.Color( pickColour() );
 			extendRoute( car, 40 );
 			return;
 
@@ -446,7 +519,8 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 
 		};
 
-		for ( const o of cars ) if ( o !== car && o.active ) consider( o.x, o.z, 5.2 );
+		const myLen = CAR_TYPES[ car.type ].L;
+		for ( const o of cars ) if ( o !== car && o.active ) consider( o.x, o.z, ( myLen + CAR_TYPES[ o.type ].L ) / 2 + 0.6 );
 		for ( const v of player.vehicles ) consider( v.pos.x, v.pos.z, v.kind === 'carriage' ? 7 : 5.5, true );
 		if ( ! player.riding ) consider( player.feet.x, player.feet.z, 2.8, true );
 		for ( const p of peds ) if ( p.active && p.onCrossing ) consider( p.x, p.z, 3 );
@@ -685,11 +759,35 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 	const _base = new THREE.Matrix4();
 	const _part = new THREE.Matrix4();
 
-	function drawCar( car ) {
+	// Only cars on the road are drawn: each type's instances are packed and
+	// the instance count trimmed, so empty slots cost the GPU nothing.
+	function drawCars() {
 
-		_q.setFromAxisAngle( UP, car.yaw );
-		_m.compose( _p.set( car.x, car.y, car.z ), _q, _s.set( 1, 1, 1 ) );
-		for ( const im of carMeshes.meshes ) im.setMatrixAt( car.slot, _m );
+		for ( const t of CAR_TYPE_KEYS ) {
+
+			const set = carMeshes[ t ];
+			let n = 0;
+			for ( const car of cars ) {
+
+				if ( ! car.active || car.type !== t ) continue;
+				_q.setFromAxisAngle( UP, car.yaw );
+				_m.compose( _p.set( car.x, car.y, car.z ), _q, _s.set( 1, 1, 1 ) );
+				for ( const im of set.meshes ) im.setMatrixAt( n, _m );
+				set.paint.setColorAt( n, car.colour );
+				n ++;
+
+			}
+
+			for ( const im of set.meshes ) {
+
+				im.count = n;
+				im.instanceMatrix.needsUpdate = true;
+
+			}
+
+			set.paint.instanceColor.needsUpdate = true;
+
+		}
 
 	}
 
@@ -706,6 +804,7 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 
 		};
 
+		set( people.shadow, p.slot, 0, 0.03, 0 );
 		set( people.torso, p.slot, 0, 1.17 + bob, 0 );
 		set( people.head, p.slot, 0, 1.66 + bob, - 0.01 );
 		set( people.hair, p.slot, 0, 1.675 + bob, - 0.005 );
@@ -724,7 +823,6 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 	function hideCar( car ) {
 
 		car.active = false;
-		for ( const im of carMeshes.meshes ) im.setMatrixAt( car.slot, HIDDEN );
 
 	}
 
@@ -778,7 +876,6 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 			if ( ! car.active ) return;
 			if ( Math.hypot( car.x - player.feet.x, car.z - player.feet.z ) > CAR_DROP ) return hideCar( car );
 			updateCar( car, dt, player, i );
-			drawCar( car );
 
 		} );
 
@@ -797,7 +894,7 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 
 		}
 
-		for ( const im of carMeshes.meshes ) im.instanceMatrix.needsUpdate = true;
+		drawCars();
 		for ( const im of Object.values( people ) ) im.instanceMatrix.needsUpdate = true;
 
 	}
@@ -813,6 +910,9 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 			_q.setFromAxisAngle( UP, - car.yaw );
 			_ray.origin.set( origin.x - car.x, origin.y - car.y, origin.z - car.z ).applyQuaternion( _q );
 			_ray.direction.copy( dir ).applyQuaternion( _q );
+			const d0 = CAR_TYPES[ car.type ];
+			_box.min.set( - d0.W / 2, 0, - d0.L / 2 );
+			_box.max.set( d0.W / 2, d0.H, d0.L / 2 );
 			if ( _ray.intersectBox( _box, _t ) ) {
 
 				const d = _t.distanceTo( _ray.origin );

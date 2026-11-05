@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { buildCarModel, CAR_TYPES, CAR_TYPE_KEYS, shadowTexture } from './carmodels.js';
 
 const UP = new THREE.Vector3( 0, 1, 0 );
 const DOWN = new THREE.Vector3( 0, - 1, 0 );
@@ -147,111 +148,20 @@ function wheel( radius, width, tireMat, rimMat, spokes = 0, spokeMat = rimMat ) 
 
 const PAINTS = [ 0x1f3b33, 0x7fb6b3, 0xb5523f, 0xe9dfc8, 0x1b1d22, 0x6b1f2a ];
 let paintIndex = 0;
+let carCycle = 0;
 
-export function buildCar() {
+// driving numbers for a car type, from its real dimensions
+function carSpec( type ) {
 
-	const root = new THREE.Group();
-	const body = new THREE.Group();
-	root.add( body );
-
-	const paint = new THREE.MeshPhysicalMaterial( {
-		color: PAINTS[ paintIndex ++ % PAINTS.length ], metalness: 0.45, roughness: 0.3,
-		clearcoat: 1, clearcoatRoughness: 0.06, toneMapped: false,
-	} );
-	const trim = std( 0x121315, 0.7 );
-	const chrome = std( 0xe2e2e2, 0.12, 1 );
-	const leather = std( 0x8a5a3c, 0.7 );
-	const headliner = std( 0xcfc8bb, 0.9, 0, { side: THREE.DoubleSide } );
-	const rubber = std( 0x161616, 0.92 );
-	const glass = new THREE.MeshPhysicalMaterial( {
-		color: 0x9fb7c2, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.22,
-		side: THREE.DoubleSide, depthWrite: false, toneMapped: false,
-	} );
-	const lamp = new THREE.MeshBasicMaterial( { color: 0xfff4dc, toneMapped: false } );
-	const tail = new THREE.MeshBasicMaterial( { color: 0xa3141b, toneMapped: false } );
-
-	// body panels around an open cabin, so the view from the driver's seat works
-	put( body, rbox( 1.84, 0.56, 1.36, 0.14, paint ), 0, 0.63, - 1.63 ); // nose and hood
-	put( body, rbox( 1.84, 0.6, 1.06, 0.14, paint ), 0, 0.66, 1.78 ); // trunk
-	for ( const s of [ - 1, 1 ] ) put( body, rbox( 0.1, 0.58, 2.3, 0.04, paint ), s * 0.87, 0.64, 0.12 ); // doors
-	put( body, rbox( 1.72, 0.16, 2.3, 0.04, trim ), 0, 0.37, 0.12 ); // floor
-	put( body, rbox( 1.86, 0.08, 4.6, 0.04, trim ), 0, 0.33, 0.02 ); // rocker and underbody
-
-	// glasshouse: windshield, rear window and side windows (no glass across your lap)
-	const yb = 0.92, yt = 1.4, zf = - 0.95, zfr = - 0.3, zrr = 1.0, zr = 1.3, hw = 0.82;
-	put( body, quad( [ - hw, yb, zf ], [ hw, yb, zf ], [ hw, yt, zfr ], [ - hw, yt, zfr ], glass ), 0, 0, 0 );
-	put( body, quad( [ hw, yb, zr ], [ - hw, yb, zr ], [ - hw, yt, zrr ], [ hw, yt, zrr ], glass ), 0, 0, 0 );
-	for ( const s of [ - 1, 1 ] ) {
-
-		const x = s * hw;
-		put( body, quad( [ x, yb, zf ], [ x, yb, zr ], [ x, yt, zrr ], [ x, yt, zfr ], glass ), 0, 0, 0 );
-		body.add( limb( new THREE.Vector3( x, yb, zf ), new THREE.Vector3( x, yt, zfr ), 0.035, 0.03, paint, 6 ) ); // A pillar
-		body.add( limb( new THREE.Vector3( x, yb, 0.42 ), new THREE.Vector3( x, yt, 0.42 ), 0.035, 0.035, paint, 6 ) ); // B pillar
-		body.add( limb( new THREE.Vector3( x, yb, zr ), new THREE.Vector3( x, yt, zrr ), 0.05, 0.04, paint, 6 ) ); // C pillar
-		put( body, rbox( 0.06, 0.07, 0.12, 0.02, paint ), s * 0.97, 1.0, - 0.62 ); // mirror
-
-	}
-
-	put( body, rbox( 1.68, 0.06, 1.36, 0.03, paint ), 0, yt + 0.02, ( zfr + zrr ) / 2 ); // roof
-	const liner = new THREE.Mesh( new THREE.PlaneGeometry( 1.6, 1.28 ).rotateX( Math.PI / 2 ), headliner );
-	put( body, liner, 0, yt - 0.015, ( zfr + zrr ) / 2 );
-
-	// interior
-	put( body, rbox( 1.64, 0.24, 0.46, 0.06, trim ), 0, 0.86, - 0.78 ); // dashboard
-	for ( const s of [ - 1, 1 ] ) {
-
-		put( body, rbox( 0.5, 0.12, 0.5, 0.05, leather ), s * 0.37, 0.56, 0.2 );
-		const back = put( body, rbox( 0.5, 0.62, 0.1, 0.05, leather ), s * 0.37, 0.86, 0.47 );
-		back.rotation.x = - 0.15;
-
-	}
-
-	put( body, rbox( 1.42, 0.12, 0.45, 0.05, leather ), 0, 0.56, 1.02 );
-	const rear = put( body, rbox( 1.42, 0.58, 0.1, 0.05, leather ), 0, 0.84, 1.27 );
-	rear.rotation.x = - 0.15;
-
-	const steering = new THREE.Group();
-	steering.position.set( - 0.37, 0.99, - 0.5 );
-	steering.rotation.x = - 1.1;
-	steering.add( new THREE.Mesh( new THREE.TorusGeometry( 0.18, 0.017, 8, 36 ), trim ) );
-	steering.add( new THREE.Mesh( new THREE.BoxGeometry( 0.34, 0.025, 0.02 ), trim ) );
-	steering.add( new THREE.Mesh( new THREE.CylinderGeometry( 0.035, 0.035, 0.05, 12 ).rotateX( Math.PI / 2 ), chrome ) );
-	const steerSpin = new THREE.Group();
-	steerSpin.add( ...steering.children );
-	steering.add( steerSpin );
-	body.add( steering );
-	body.add( limb( new THREE.Vector3( - 0.37, 0.8, - 0.78 ), new THREE.Vector3( - 0.37, 0.97, - 0.53 ), 0.025, 0.025, trim, 8 ) );
-
-	const display = makeDisplay( 0.17, 0.085 );
-	display.mesh.position.set( - 0.37, 0.995, - 0.66 );
-	display.mesh.rotation.x = - 0.45;
-	body.add( display.mesh );
-
-	// front and back
-	put( body, rbox( 1.92, 0.14, 0.14, 0.06, chrome ), 0, 0.4, - 2.32 );
-	put( body, rbox( 1.92, 0.14, 0.14, 0.06, chrome ), 0, 0.42, 2.34 );
-	put( body, rbox( 0.9, 0.2, 0.04, 0.02, trim ), 0, 0.63, - 2.31 );
-	for ( const s of [ - 1, 1 ] ) {
-
-		put( body, new THREE.Mesh( new THREE.CylinderGeometry( 0.09, 0.09, 0.04, 20 ).rotateX( Math.PI / 2 ), lamp ), s * 0.62, 0.68, - 2.31 );
-		put( body, rbox( 0.36, 0.1, 0.03, 0.01, tail ), s * 0.65, 0.78, 2.32 );
-
-	}
-
-	// wheels
-	const wheels = [];
-	for ( const [ x, z, front ] of [ [ - 0.8, - 1.4, true ], [ 0.8, - 1.4, true ], [ - 0.8, 1.4, false ], [ 0.8, 1.4, false ] ] ) {
-
-		const pivot = new THREE.Group();
-		pivot.position.set( x, 0.34, z );
-		const spin = wheel( 0.34, 0.24, rubber, chrome );
-		pivot.add( spin );
-		root.add( pivot );
-		wheels.push( { pivot, spin, front, radius: 0.34, local: new THREE.Vector3( x, 0, z ) } );
-
-	}
-
-	return { root, body, wheels, steering: steerSpin, display };
+	const d = CAR_TYPES[ type ];
+	const len = d.cabLength || d.L;
+	return {
+		...SPECS.car, label: d.label, maxFwd: d.maxFwd, steerMax: d.steerMax,
+		wheelbase: d.wheelbase, halfWidth: d.W / 2, halfLength: d.L / 2,
+		eye: new THREE.Vector3( d.eye.x, d.eye.y, - d.L / 2 + d.eye.u * len ),
+		exit: new THREE.Vector3( - ( d.W / 2 + 1.1 ), 0, 0 ),
+		spawnAhead: 5 + ( d.L - 4.6 ) * 0.6,
+	};
 
 }
 
@@ -443,6 +353,12 @@ function buildCarriage() {
 	const horse = buildHorse();
 	horse.group.position.set( 0, 0, - 4.6 );
 	root.add( horse.group );
+	const shadow = new THREE.Mesh(
+		new THREE.PlaneGeometry( 2.6, 9.5 ).rotateX( - Math.PI / 2 ),
+		new THREE.MeshBasicMaterial( { map: shadowTexture(), color: 0x000000, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: - 2, toneMapped: false } ),
+	);
+	shadow.position.set( 0, 0.03, - 1.6 );
+	root.add( shadow );
 
 	return { root, body, wheels, horse, display };
 
@@ -696,16 +612,18 @@ export function createVehicles( { scene, castRay, castTerrain, castExtra, audio,
 
 	}
 
-	function make( kind ) {
+	function make( kind, type ) {
 
-		const model = kind === 'car' ? buildCar() : kind === 'carriage' ? buildCarriage() : buildBoat();
+		const model = kind === 'car'
+			? buildCarModel( type, { paint: PAINTS[ paintIndex ++ % PAINTS.length ], interior: true } )
+			: kind === 'carriage' ? buildCarriage() : buildBoat();
 		model.root.traverse( o => {
 
 			if ( o.isMesh ) o.castShadow = false;
 
 		} );
 		return {
-			kind, spec: SPECS[ kind ], model,
+			kind, type, spec: kind === 'car' ? carSpec( type ) : SPECS[ kind ], model,
 			pos: new THREE.Vector3(), yaw: 0, speed: 0, steer: 0, power: 0,
 			pitch: 0, roll: 0, rise: 1, seaLevel: 0, windFrom: new THREE.Vector3( 1, 0, 0 ),
 			displayTimer: 0, stuckFlash: 0,
@@ -716,9 +634,18 @@ export function createVehicles( { scene, castRay, castTerrain, castExtra, audio,
 	function place( kind, pos, yaw, extra = {} ) {
 
 		let v = list.find( x => x.kind === kind );
+		if ( v && kind === 'car' && extra.type && v.type !== extra.type ) {
+
+			// a different model: replace the old car
+			group.remove( v.model.root );
+			list.splice( list.indexOf( v ), 1 );
+			v = null;
+
+		}
+
 		if ( ! v ) {
 
-			v = make( kind );
+			v = make( kind, extra.type );
 			list.push( v );
 			group.add( v.model.root );
 
@@ -1039,7 +966,8 @@ export function createVehicles( { scene, castRay, castTerrain, castExtra, audio,
 		// spawn a ground vehicle in front of a standing player, facing the way they face
 		summonGround( kind, feet, yaw ) {
 
-			const s = SPECS[ kind ];
+			const type = kind === 'car' ? CAR_TYPE_KEYS[ carCycle ++ % CAR_TYPE_KEYS.length ] : null;
+			const s = kind === 'car' ? carSpec( type ) : SPECS[ kind ];
 			const f = forwardOf( yaw, new THREE.Vector3() );
 			const p = feet.clone().addScaledVector( f, s.spawnAhead );
 			// don't land on top of another parked vehicle
@@ -1059,14 +987,14 @@ export function createVehicles( { scene, castRay, castTerrain, castExtra, audio,
 
 			}
 
-			return place( kind, hit.point, yaw );
+			return place( kind, hit.point, yaw, type ? { type } : {} );
 
 		},
 		enter( v ) {
 
 			riding = v;
 			const tips = {
-				car: [ 'Driving', 'Right pinch or right trigger to go, left to brake. Hold your hands like a wheel to steer.' ],
+				car: [ v.type ? CAR_TYPES[ v.type ].label : 'Driving', 'Right pinch or right trigger to go, left to brake. Hold your hands like a wheel to steer.' ],
 				carriage: [ 'At the reins', 'Right pinch to urge the horse on, left to slow. Tilt your hands to steer.' ],
 				boat: [ 'Sailing', 'Wind is from the southwest. Right pinch trims the sails in, left eases them. Tilt your hands to steer.' ],
 			};
