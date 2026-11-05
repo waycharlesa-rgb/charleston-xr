@@ -1,0 +1,33 @@
+# Downloads freely licensed reference photos of the modelled cars from
+# Wikimedia Commons and pushes them to the `reference-photos` branch (not main),
+# with photographer credits. They guide the car modelling; the game never ships them.
+name: Fetch car reference photos
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/fetch-reference.mjs
+      - name: Push to the reference-photos branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mv reference /tmp/reference
+          git checkout --orphan reference-photos
+          git rm -rq --cached .
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          mv /tmp/reference reference
+          printf '# Reference photos\n\nFrom Wikimedia Commons; see each credits.json for author and licence. Used only to shape the car models.\n' > README.md
+          git add reference README.md
+          git commit -qm "Reference photos from Wikimedia Commons"
+          git push -f origin reference-photos
