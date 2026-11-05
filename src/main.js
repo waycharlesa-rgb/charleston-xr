@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { unzipSync, strFromU8 } from 'fflate';
 import { TilesRenderer } from '3d-tiles-renderer/three';
 import { GoogleCloudAuthPlugin } from '3d-tiles-renderer/core/plugins';
 import {
@@ -1585,14 +1586,61 @@ function showCustomOption( label ) {
 
 }
 
-async function loadCustomModel( file, { select = true } = {} ) {
+// A model file as downloaded: a .glb, or a .zip holding a .glb or a .gltf with its files.
+async function parseModelFile( buf ) {
 
-	ui.modelState.textContent = 'Loading ' + file.name + '…';
-	const loader = new GLTFLoader().setDRACOLoader( draco );
+	const bytes = new Uint8Array( buf );
+	if ( ! ( bytes[ 0 ] === 0x50 && bytes[ 1 ] === 0x4b ) ) {
+
+		return new GLTFLoader().setDRACOLoader( draco ).parseAsync( buf.slice( 0 ), './' );
+
+	}
+
+	const entries = unzipSync( bytes, { filter: f => ! f.name.startsWith( '__MACOSX' ) } );
+	const names = Object.keys( entries );
+	const glb = names.filter( n => /\.glb$/i.test( n ) ).sort( ( a, b ) => entries[ b ].length - entries[ a ].length )[ 0 ];
+	if ( glb ) {
+
+		const e = entries[ glb ];
+		return new GLTFLoader().setDRACOLoader( draco ).parseAsync( e.buffer.slice( e.byteOffset, e.byteOffset + e.byteLength ), './' );
+
+	}
+
+	const gltf = names.find( n => /\.gltf$/i.test( n ) );
+	if ( ! gltf ) throw new Error( 'the zip has no .glb or .gltf file inside' );
+	// point the .gltf's relative file paths at the files from the zip
+	const base = gltf.includes( '/' ) ? gltf.slice( 0, gltf.lastIndexOf( '/' ) + 1 ) : '';
+	const urls = {};
+	for ( const n of names ) urls[ n ] = URL.createObjectURL( new Blob( [ entries[ n ] ] ) );
+	const manager = new THREE.LoadingManager();
+	manager.setURLModifier( url => {
+
+		const clean = decodeURIComponent( url.replace( /^\.\//, '' ) );
+		return urls[ base + clean ] || urls[ clean ] || url;
+
+	} );
 	try {
 
-		const gltf = await loader.parseAsync( file.buf.slice( 0 ), './' );
-		const name = file.name.replace( /\.glb$/i, '' );
+		return await new GLTFLoader( manager ).setDRACOLoader( draco ).parseAsync( strFromU8( entries[ gltf ] ), '' );
+
+	} finally {
+
+		setTimeout( () => Object.values( urls ).forEach( u => URL.revokeObjectURL( u ) ), 10000 );
+
+	}
+
+}
+
+// "Range+Rover+Sports+2018+(.GLB).zip" -> "Range Rover Sports 2018"
+const modelName = n => n.replace( /\+/g, ' ' ).replace( /\.(zip|glb|gltf)$/i, '' ).replace( /\(\.?(glb|gltf)\)/i, '' ).trim() || 'Your model';
+
+async function loadCustomModel( file, { select = true } = {} ) {
+
+	ui.modelState.textContent = 'Loading ' + modelName( file.name ) + '…';
+	try {
+
+		const gltf = await parseModelFile( file.buf );
+		const name = modelName( file.name );
 		const info = registerCustomCar( gltf.scene, { name, turn: file.turn } );
 		customFile = file;
 		showCustomOption( 'Your model: ' + name );
@@ -1604,7 +1652,7 @@ async function loadCustomModel( file, { select = true } = {} ) {
 
 	} catch ( err ) {
 
-		ui.modelState.textContent = 'Could not read that file as a 3D model: ' + ( err?.message || err ) + '. Use a single .glb file.';
+		ui.modelState.textContent = 'Could not read that file as a 3D model: ' + ( err?.message || err ) + '. Use a .glb file, or a .zip containing one.';
 
 	}
 

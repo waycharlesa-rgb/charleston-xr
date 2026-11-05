@@ -220,12 +220,12 @@
 
 	<fieldset>
 		<label for="model-file">Your own car model</label>
-		<input id="model-file" type="file" accept=".glb,model/gltf-binary">
+		<input id="model-file" type="file" accept=".glb,.zip,model/gltf-binary,application/zip">
 		<div class="row">
 			<button type="button" id="model-turn" disabled>Turn it around</button>
 			<button type="button" id="model-remove" disabled>Remove</button>
 		</div>
-		<p id="model-state" class="hint" aria-live="polite">Load a .glb file. It stays on this device and is never uploaded.</p>
+		<p id="model-state" class="hint" aria-live="polite">Load a .glb file, or a .zip with one inside. It stays on this device and is never uploaded.</p>
 	</fieldset>
 
 	<div class="actions">
