@@ -107,7 +107,7 @@ function pickColour() {
 }
 
 // what's on the road: plenty of SUVs and pickups in the Lowcountry
-const TYPE_MIX = [ [ 'sedan', 40 ], [ 'suv', 38 ], [ 'pickup', 22 ] ];
+const TYPE_MIX = [ [ 'sedan', 34 ], [ 'suv', 32 ], [ 'pickup', 20 ], [ 'escalade', 8 ], [ 'rangerover', 6 ] ];
 function pickType() {
 
 	let r = Math.random() * 100;
@@ -201,6 +201,7 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 	// graph
 	let NX, NZ; // node positions
 	const lanes = []; // directed car lanes
+	let driveable = []; // lanes traffic may use
 	let outLanes = []; // node -> lane indices
 	let degree = []; // node -> number of distinct neighbours on the road network
 	const walks = []; // undirected walking segments
@@ -309,7 +310,76 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 		}
 
 		degree = nb.map( s => s.size );
+		markDriveable();
 		ready = true;
+
+	}
+
+	// Keep traffic on the part of the network where every lane leads on to more
+	// road (the largest strongly connected set of lanes). Streets cut off at the
+	// edge of the map, or ending at the seawall, would otherwise trap cars.
+	function markDriveable() {
+
+		const N = lanes.length;
+		const index = new Int32Array( N ).fill( - 1 ), low = new Int32Array( N ), onStack = new Uint8Array( N );
+		const stack = [], work = [];
+		let next = 0, best = [];
+		const visit = v => {
+
+			index[ v ] = low[ v ] = next ++;
+			stack.push( v );
+			onStack[ v ] = 1;
+			work.push( [ v, 0 ] );
+
+		};
+
+		for ( let s = 0; s < N; s ++ ) {
+
+			if ( index[ s ] !== - 1 ) continue;
+			visit( s );
+			while ( work.length ) {
+
+				const top = work[ work.length - 1 ], v = top[ 0 ];
+				const succ = outLanes[ lanes[ v ].b ];
+				if ( top[ 1 ] < succ.length ) {
+
+					const w = succ[ top[ 1 ] ++ ];
+					if ( index[ w ] === - 1 ) visit( w );
+					else if ( onStack[ w ] ) low[ v ] = Math.min( low[ v ], index[ w ] );
+
+				} else {
+
+					work.pop();
+					if ( work.length ) {
+
+						const u = work[ work.length - 1 ][ 0 ];
+						low[ u ] = Math.min( low[ u ], low[ v ] );
+
+					}
+
+					if ( low[ v ] === index[ v ] ) {
+
+						const comp = [];
+						let w;
+						do {
+
+							w = stack.pop();
+							onStack[ w ] = 0;
+							comp.push( w );
+
+						} while ( w !== v );
+						if ( comp.length > best.length ) best = comp;
+
+					}
+
+				}
+
+			}
+
+		}
+
+		for ( const li of best ) lanes[ li ].ok = true;
+		driveable = best;
 
 	}
 
@@ -327,8 +397,14 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 	function chooseNext( li ) {
 
 		const L = lanes[ li ];
-		const opts = outLanes[ L.b ].filter( o => lanes[ o ].b !== L.a );
-		if ( ! opts.length ) return outLanes[ L.b ].length ? outLanes[ L.b ][ 0 ] : - 1; // dead end: turn around
+		const opts = outLanes[ L.b ].filter( o => lanes[ o ].ok && lanes[ o ].b !== L.a );
+		if ( ! opts.length ) {
+
+			// nowhere new to go: turn around if we can
+			const back = outLanes[ L.b ].find( o => lanes[ o ].ok ) ?? outLanes[ L.b ][ 0 ];
+			return back ?? - 1;
+
+		}
 		// prefer carrying on straight
 		let total = 0;
 		const w = opts.map( o => {
@@ -412,7 +488,7 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 
 		for ( let tries = 0; tries < 30; tries ++ ) {
 
-			const li = Math.floor( Math.random() * lanes.length );
+			const li = driveable[ Math.floor( Math.random() * driveable.length ) ];
 			const L = lanes[ li ];
 			const s = Math.random() * L.len;
 			lanePoint( li, s, _p );
@@ -500,8 +576,21 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 		// keep a gap to anything ahead in our path: cars, you, your vehicles, people crossing
 		let gap = Infinity;
 		let blockedByPlayer = false;
-		const consider = ( x, z, len, isPlayer = false ) => {
+		let why = 'free';
+		const limitGap = ( g, reason ) => {
 
+			if ( g < gap ) {
+
+				gap = g;
+				why = reason;
+
+			}
+
+		};
+		const consider = ( x, z, len, isPlayer = false, oyaw = null ) => {
+
+			// oncoming traffic is in the other lane: don't stop for it
+			if ( oyaw !== null && fx * - Math.sin( oyaw ) + fz * - Math.cos( oyaw ) < - 0.5 ) return;
 			const rx = x - car.x, rz = z - car.z;
 			const ahead = rx * fx + rz * fz;
 			const side = Math.abs( rx * fz - rz * fx );
@@ -512,6 +601,7 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 
 					gap = g;
 					blockedByPlayer = isPlayer;
+					why = isPlayer ? 'player' : 'following';
 
 				}
 
@@ -520,7 +610,7 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 		};
 
 		const myLen = CAR_TYPES[ car.type ].L;
-		for ( const o of cars ) if ( o !== car && o.active ) consider( o.x, o.z, ( myLen + CAR_TYPES[ o.type ].L ) / 2 + 0.6 );
+		for ( const o of cars ) if ( o !== car && o.active ) consider( o.x, o.z, ( myLen + CAR_TYPES[ o.type ].L ) / 2 + 0.6, false, o.yaw );
 		for ( const v of player.vehicles ) consider( v.pos.x, v.pos.z, v.kind === 'carriage' ? 7 : 5.5, true );
 		if ( ! player.riding ) consider( player.feet.x, player.feet.z, 2.8, true );
 		for ( const p of peds ) if ( p.active && p.onCrossing ) consider( p.x, p.z, 3 );
@@ -544,23 +634,32 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 
 		}
 
-		// take turns at intersections: the car nearer the junction goes first
+		// take turns at intersections: give way to a car already crossing the
+		// junction, or to one heading into the same junction ahead of us. Cars
+		// leaving a junction, or queued behind it, don't hold anyone up.
 		const ix = nextIntersection( car, 16 );
+		car.ixNode = ix ? ix.node : - 1;
+		car.ixD = ix ? ix.d : Infinity;
+		let yielding = false;
 		if ( ix && ix.d > 1 ) {
 
 			const nx = NX[ ix.node ], nz = NZ[ ix.node ];
 			for ( const o of cars ) {
 
 				if ( o === car || ! o.active ) continue;
-				const od = Math.hypot( o.x - nx, o.z - nz );
-				if ( od < 9 && od < ix.d && ( o.speed > 0.5 || od < 5 ) ) {
+				const inside = o.speed > 0.5 && Math.hypot( o.x - nx, o.z - nz ) < 4.5;
+				const first = o.ixNode === ix.node && o.ixD < ix.d && o.ixD < 12;
+				if ( inside || first ) {
 
-					gap = Math.min( gap, ix.d - 6 );
+					yielding = true;
 					break;
 
 				}
 
 			}
+
+			// after a few seconds of waiting, edge out anyway so nothing locks up
+			if ( yielding && ( car.junctionWait || 0 ) < 4 ) limitGap( ix.d - 6, 'junction' );
 
 			// people on a crosswalk at this junction
 			if ( crossingNodes.has( ix.node ) ) {
@@ -569,7 +668,7 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 
 					if ( p.active && p.onCrossing && Math.hypot( p.x - nx, p.z - nz ) < 8 ) {
 
-						gap = Math.min( gap, ix.d - 4 );
+						limitGap( ix.d - 4, 'crosswalk' );
 						break;
 
 					}
@@ -587,6 +686,8 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 
 		}
 
+		car.junctionWait = yielding && car.speed < 0.5 ? ( car.junctionWait || 0 ) + dt : 0;
+		car.why = why;
 		const target = Math.max( 0, Math.min( limit, ( gap - 1.5 ) * 0.9 ) );
 		car.speed += Math.max( - 7 * dt, Math.min( 2.5 * dt, target - car.speed ) );
 
@@ -858,7 +959,7 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 			for ( let n = 0; n < 3; n ++ ) {
 
 				const car = cars.find( c => ! c.active );
-				if ( car && lanes.length ) spawnCar( car, player );
+				if ( car && driveable.length ) spawnCar( car, player );
 
 			}
 
@@ -966,7 +1067,7 @@ export function createTraffic( { scene, toLocal, castTerrain, obstacleSolids, au
 		},
 		get stats() {
 
-			return { cars: cars.filter( c => c.active ).length, people: peds.filter( p => p.active ).length, lanes: lanes.length, walks: walks.length };
+			return { cars: cars.filter( c => c.active ).length, people: peds.filter( p => p.active ).length, lanes: lanes.length, driveable: driveable.length, walks: walks.length };
 
 		},
 		get ready() {

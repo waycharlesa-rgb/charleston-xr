@@ -133,7 +133,8 @@
 		display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 32px);
 		pointer-events: auto;
 	}
-	#vehicle-bar button { background: rgba(28,36,33,.78); padding: 6px 10px; font-size: 13px; }
+	#vehicle-bar button, #vehicle-bar select { background: rgba(28,36,33,.78); padding: 6px 10px; font-size: 13px; width: auto; }
+	.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 	kbd { font: inherit; font-size: 11px; color: var(--muted); border: 1px solid rgba(168,213,209,.35); border-radius: 3px; padding: 0 4px; margin-left: 2px; }
 
 	#hint {
@@ -246,6 +247,7 @@
 		<dl>
 			<dt>Menu</dt><dd>Turn your left palm up, then tap a row with your right index finger. With controllers, hold the left grip and point the right trigger at a row</dd>
 			<dt>Summon</dt><dd>A car or a carriage appears just ahead of you and you climb in. A sailboat takes you out to the nearest stretch of harbor</dd>
+			<dt>Car model</dt><dd>Tap “Car: …” on the palm menu to choose: Range Rover, Escalade, midsize sedan, compact SUV or full-size pickup</dd>
 			<dt>Steer</dt><dd>Hold your hands like a wheel and tilt them; right pinch to go, left pinch to brake or reverse</dd>
 			<dt>Sailing</dt><dd>The wind is from the southwest. Right pinch trims the sails in, left eases them. You can’t sail within about 40° of the wind</dd>
 			<dt>Get out</dt><dd>From the palm menu, or B / Y on controllers</dd>
@@ -278,6 +280,8 @@
 	<div class="hud-left"><span id="hud-place"></span><span id="hud-mode" data-mode="walk">On foot</span></div>
 	<button id="hud-menu" type="button">Menu</button>
 	<div id="vehicle-bar" role="group" aria-label="Vehicles">
+		<label class="sr-only" for="car-model">Car model</label>
+		<select id="car-model" title="Which car to summon"></select>
 		<button type="button" data-vehicle="car">Car <kbd>1</kbd></button>
 		<button type="button" data-vehicle="carriage">Carriage <kbd>2</kbd></button>
 		<button type="button" data-vehicle="boat">Boat <kbd>3</kbd></button>

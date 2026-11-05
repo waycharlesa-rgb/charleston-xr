@@ -14,6 +14,7 @@ import { PLACES, ORIGIN, BOAT_SPOTS } from './places.js';
 import { HarborAmbience } from './audio.js';
 import { createAlchemy } from './alchemy.js';
 import { createVehicles, SPECS } from './vehicles.js';
+import { CAR_TYPES, CAR_TYPE_KEYS } from './carmodels.js';
 import { createWristMenu } from './wristmenu.js';
 import { createTraffic } from './traffic.js';
 
@@ -90,6 +91,7 @@ const ui = {
 	hudMode: $( 'hud-mode' ),
 	hudMenu: $( 'hud-menu' ),
 	vehicleExit: $( 'vehicle-toggle' ),
+	carModel: $( 'car-model' ),
 	hint: $( 'hint' ),
 	crosshair: $( 'crosshair' ),
 	attribution: $( 'attribution' ),
@@ -159,6 +161,10 @@ su.sunPosition.value.setFromSphericalCoords( 1, ( 90 - 28 ) * D2R, 245 * D2R );
 	const pmrem = new THREE.PMREMGenerator( renderer );
 	const envScene = new THREE.Scene();
 	envScene.add( sky );
+	// the street below: without it, car sides would mirror bright sky instead of dark ground
+	const groundDisc = new THREE.Mesh( new THREE.CircleGeometry( 500, 32 ).rotateX( - Math.PI / 2 ), new THREE.MeshBasicMaterial( { color: 0x3f3b35 } ) );
+	groundDisc.position.y = - 1.5;
+	envScene.add( groundDisc );
 	scene.environment = pmrem.fromScene( envScene, 0, 0.1, 1000 ).texture;
 	pmrem.dispose();
 
@@ -272,7 +278,9 @@ function startTestGround() {
 	const mat = new THREE.MeshBasicMaterial( { map: tex, toneMapped: false } );
 	alchemy.patchMaterial( mat );
 	testGround = new THREE.Group();
-	testGround.add( new THREE.Mesh( geo, mat ) );
+	const groundMesh = new THREE.Mesh( geo, mat );
+	groundMesh.raycast = lazyBVHRaycast; // same fast ray tests as the real city tiles
+	testGround.add( groundMesh );
 
 	const palette = [ '#e7b9a3', '#f2e2a6', '#a8d5d1', '#d9c2e0', '#f3efe6' ];
 	for ( let i = 0; i < 14; i ++ ) {
@@ -686,7 +694,7 @@ function summon( kind ) {
 
 	}
 
-	const v = vehicles.summonGround( kind, feet, headYaw() );
+	const v = vehicles.summonGround( kind, feet, headYaw(), kind === 'car' ? carChoice : null );
 	if ( v ) setTimeout( () => {
 
 		if ( ! vehicles.riding ) enterVehicle( v );
@@ -749,12 +757,24 @@ function enterNearest() {
 
 }
 
+// which car you summon: chosen on the palm menu or the on-screen picker, remembered
+let carChoice = CAR_TYPES[ store.get( 'car' ) ] ? store.get( 'car' ) : 'rangerover';
+
+function setCarChoice( type ) {
+
+	carChoice = type;
+	store.set( 'car', type );
+	if ( ui.carModel ) ui.carModel.value = type;
+
+}
+
 function menuItems() {
 
 	const riding = vehicles.riding;
 	const near = ! riding && vehicles.nearest( feetPosition(), 7 );
 	return [
-		{ id: 'car', label: 'Summon a car' },
+		{ id: 'car', label: `Summon the ${ CAR_TYPES[ carChoice ].label }` },
+		{ id: 'car-model', label: `Car: ${ CAR_TYPES[ carChoice ].label }  ›` },
 		{ id: 'carriage', label: 'Summon a carriage' },
 		{ id: 'boat', label: 'Sail from the harbor' },
 		riding
@@ -766,7 +786,8 @@ function menuItems() {
 
 function menuSelect( id ) {
 
-	if ( id === 'car' || id === 'carriage' ) summon( id );
+	if ( id === 'car-model' ) setCarChoice( CAR_TYPE_KEYS[ ( CAR_TYPE_KEYS.indexOf( carChoice ) + 1 ) % CAR_TYPE_KEYS.length ] );
+	else if ( id === 'car' || id === 'carriage' ) summon( id );
 	else if ( id === 'boat' ) summonBoat();
 	else if ( id === 'enter' ) enterNearest();
 	else if ( id === 'exit' ) exitVehicle();
@@ -1494,6 +1515,23 @@ ui.enterScreen.addEventListener( 'click', () => {
 } );
 
 ui.hudMenu.addEventListener( 'click', openMenu );
+for ( const k of CAR_TYPE_KEYS ) {
+
+	const o = document.createElement( 'option' );
+	o.value = k;
+	o.textContent = CAR_TYPES[ k ].label;
+	o.title = 'Modelled on the ' + CAR_TYPES[ k ].basedOn;
+	ui.carModel.append( o );
+
+}
+
+ui.carModel.value = carChoice;
+ui.carModel.addEventListener( 'change', () => {
+
+	setCarChoice( ui.carModel.value );
+	ui.carModel.blur();
+
+} );
 for ( const b of document.querySelectorAll( '[data-vehicle]' ) ) {
 
 	b.addEventListener( 'click', () => {

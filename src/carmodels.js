@@ -54,6 +54,43 @@ export const CAR_TYPES = {
 		grille: { u: [ 0, 0.03 ], y: [ 0.55, 1.1 ], x: 0.62, chrome: true },
 		eye: { x: - 0.42, y: 1.66, u: 0.72 }, maxFwd: 24, steerMax: 0.55,
 	},
+	rangerover: {
+		label: 'Range Rover', basedOn: 'Range Rover (L460, 2022–)',
+		L: 5.052, W: 2.047, H: 1.87, wheelbase: 2.997, frontOverhang: 0.93, wheelR: 0.41, tireW: 0.285, rimR: 0.285,
+		// flat clamshell hood, high level belt line, a roof that falls away slightly to the rear
+		top: [ [ 0, 0.86 ], [ 0.008, 0.98 ], [ 0.03, 1.05 ], [ 0.1, 1.09 ], [ 0.25, 1.12 ], [ 0.29, 1.14 ], [ 0.37, 1.55 ], [ 0.43, 1.8 ], [ 0.5, 1.87 ], [ 0.75, 1.86 ], [ 0.92, 1.83 ], [ 0.955, 1.78 ], [ 0.975, 1.55 ], [ 0.99, 1.2 ], [ 1, 1.0 ] ],
+		belt: [ [ 0, 0.86 ], [ 0.29, 1.13 ], [ 0.9, 1.18 ], [ 1, 1.15 ] ],
+		bottom: [ [ 0, 0.48 ], [ 0.03, 0.34 ], [ 0.1, 0.25 ], [ 0.9, 0.25 ], [ 0.97, 0.34 ], [ 1, 0.5 ] ],
+		halfW: [ [ 0, 0.86 ], [ 0.015, 0.97 ], [ 0.06, 1.015 ], [ 0.2, 1.023 ], [ 0.85, 1.023 ], [ 0.96, 1.0 ], [ 0.99, 0.94 ], [ 1, 0.88 ] ],
+		roofW: [ [ 0, 0.78 ], [ 0.45, 0.82 ], [ 0.8, 0.82 ], [ 1, 0.78 ] ],
+		windshield: [ 0.3, 0.44 ], rearGlass: [ 0.952, 0.99 ], sideGlass: [ 0.315, 0.9 ],
+		pillars: [ [ 0.52, 0.545 ], [ 0.74, 0.76 ] ], // black B and C pillars; the D pillar stays body colour
+		head: { u: [ 0.003, 0.05 ], y: [ 0.93, 1.02 ], x: [ 0.62, 0.99 ] },
+		tail: { u: [ 0.97, 1 ], y: [ 1.0, 1.3 ], x: [ 0.8, 1.0 ] },
+		blackout: [ { u: [ 0.985, 1 ], y: [ 1.06, 1.16 ], x: [ 0, 0.8 ] } ], // gloss band joining the taillights
+		grille: { u: [ 0, 0.02 ], y: [ 0.62, 0.95 ], x: 0.5, chrome: false },
+		roofBlack: true,
+		eye: { x: - 0.4, y: 1.56, u: 0.5 }, maxFwd: 30, steerMax: 0.55,
+	},
+	escalade: {
+		label: 'Escalade', basedOn: 'Cadillac Escalade (2021–)',
+		L: 5.382, W: 2.06, H: 1.948, wheelbase: 3.071, frontOverhang: 1.0, wheelR: 0.417, tireW: 0.275, rimR: 0.28,
+		// tall flat nose, long flat roof, a near-vertical back
+		top: [ [ 0, 0.98 ], [ 0.006, 1.1 ], [ 0.02, 1.16 ], [ 0.08, 1.19 ], [ 0.27, 1.22 ], [ 0.31, 1.25 ], [ 0.4, 1.7 ], [ 0.46, 1.92 ], [ 0.53, 1.948 ], [ 0.9, 1.94 ], [ 0.96, 1.9 ], [ 0.985, 1.8 ], [ 0.995, 1.5 ], [ 1, 1.1 ] ],
+		belt: [ [ 0, 0.98 ], [ 0.31, 1.22 ], [ 0.92, 1.27 ], [ 1, 1.25 ] ],
+		bottom: [ [ 0, 0.5 ], [ 0.015, 0.4 ], [ 0.07, 0.3 ], [ 0.93, 0.3 ], [ 0.98, 0.38 ], [ 1, 0.52 ] ],
+		halfW: [ [ 0, 0.93 ], [ 0.012, 1.0 ], [ 0.05, 1.025 ], [ 0.2, 1.03 ], [ 0.9, 1.03 ], [ 0.97, 1.02 ], [ 0.995, 0.98 ], [ 1, 0.94 ] ],
+		roofW: [ [ 0, 0.82 ], [ 0.5, 0.86 ], [ 1, 0.84 ] ],
+		windshield: [ 0.31, 0.465 ], rearGlass: [ 0.98, 1 ], sideGlass: [ 0.33, 0.95 ],
+		pillars: [ [ 0.53, 0.555 ], [ 0.75, 0.775 ] ],
+		// headlamps plus the vertical light bars that run down the front corners
+		head: [ { u: [ 0.003, 0.05 ], y: [ 1.0, 1.1 ], x: [ 0.6, 0.98 ] }, { u: [ 0, 0.04 ], y: [ 0.62, 1.0 ], x: [ 0.9, 1.05 ] } ],
+		// tall taillights up the rear corners
+		tail: { u: [ 0.975, 1 ], y: [ 0.9, 1.75 ], x: [ 0.86, 1.05 ] },
+		grille: { u: [ 0, 0.025 ], y: [ 0.55, 1.12 ], x: 0.6, chrome: true },
+		beltChrome: true,
+		eye: { x: - 0.42, y: 1.66, u: 0.5 }, maxFwd: 28, steerMax: 0.52,
+	},
 };
 
 export const CAR_TYPE_KEYS = Object.keys( CAR_TYPES );
@@ -95,6 +132,8 @@ function curve( pts ) {
 }
 
 const inRange = ( v, r ) => r && v >= r[ 0 ] && v <= r[ 1 ];
+const rects = r => ( ! r ? [] : Array.isArray( r ) ? r : [ r ] );
+const inRect = ( r, u, y, x ) => inRange( u, r.u ) && inRange( y, r.y ) && inRange( x, r.x );
 
 // ---------------------------------------------------------------- materials
 
@@ -112,6 +151,7 @@ export function carMaterials( { paint = 0x1f3b33, glassOpacity = 0.55 } = {} ) {
 		rubber: new THREE.MeshStandardMaterial( { color: 0x151515, roughness: 0.9, ...tm } ),
 		rim: new THREE.MeshStandardMaterial( { color: 0xc7cbd0, roughness: 0.25, metalness: 0.95, ...tm } ),
 		dark: new THREE.MeshStandardMaterial( { color: 0x1b1c1e, roughness: 0.8, side: THREE.DoubleSide, ...tm } ),
+		gloss: new THREE.MeshPhysicalMaterial( { color: 0x08090a, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04, ...tm } ),
 		shadow: new THREE.MeshBasicMaterial( { map: shadowTexture(), color: 0x000000, transparent: true, opacity: 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: - 2, ...tm } ),
 	};
 
@@ -269,12 +309,15 @@ function sweptBody( def, length, mats, wheelsZ, S = 160 ) {
 		if ( band === 'under' ) mat = mats.dark;
 		else if ( ( u < 0.06 || u > 0.94 ) && cy < Math.min( st.yt, st2.yt ) * 0.42 && ax < w - 0.12 ) mat = mats.trim; // lower bumper valance
 		if ( inRange( u, def.grille.u ) && inRange( cy, def.grille.y ) && ax < def.grille.x ) mat = def.grille.chrome ? mats.chrome : mats.grille;
-		if ( band !== 'roof' && def.head && inRange( u, def.head.u ) && inRange( cy, def.head.y ) && inRange( ax, def.head.x ) ) mat = mats.head;
-		if ( band !== 'roof' && def.tail && inRange( u, def.tail.u ) && inRange( cy, def.tail.y ) && inRange( ax, def.tail.x ) ) mat = mats.tail;
-		if ( band === 'roof' && ( inRange( u, def.windshield ) || inRange( u, def.rearGlass ) ) ) mat = mats.glass;
+		if ( band !== 'roof' && rects( def.blackout ).some( r => inRect( r, u, cy, ax ) ) ) mat = mats.gloss;
+		if ( band !== 'roof' && rects( def.head ).some( r => inRect( r, u, cy, ax ) ) ) mat = mats.head;
+		if ( band !== 'roof' && rects( def.tail ).some( r => inRect( r, u, cy, ax ) ) ) mat = mats.tail;
+		const aboveBelt = cy > ( st.belt + st2.belt ) / 2 - 0.02;
+		if ( band === 'roof' && aboveBelt && ( inRange( u, def.windshield ) || inRange( u, def.rearGlass ) ) ) mat = mats.glass;
+		else if ( def.roofBlack && greenhouse && ( band === 'roof' || band === 'rail' ) ) mat = mats.gloss; // contrast roof
 		else if ( greenhouse ) {
 
-			if ( band === 'belt' ) mat = mats.trim; // window seal along the belt line
+			if ( band === 'belt' ) mat = def.beltChrome ? mats.chrome : mats.trim; // window seal along the belt line
 			else if ( band === 'window' && inRange( u, def.sideGlass ) ) mat = def.pillars.some( r => inRange( u, r ) ) ? mats.trim : mats.glass;
 			else if ( band === 'rail' && ( inRange( u, def.windshield ) || inRange( u, def.sideGlass ) ) ) mat = mats.trim; // pillars and drip rail
 

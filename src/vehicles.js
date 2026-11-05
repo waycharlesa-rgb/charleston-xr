@@ -964,9 +964,9 @@ export function createVehicles( { scene, castRay, castTerrain, castExtra, audio,
 		forwardOf,
 		localToWorld,
 		// spawn a ground vehicle in front of a standing player, facing the way they face
-		summonGround( kind, feet, yaw ) {
+		summonGround( kind, feet, yaw, carType = null ) {
 
-			const type = kind === 'car' ? CAR_TYPE_KEYS[ carCycle ++ % CAR_TYPE_KEYS.length ] : null;
+			const type = kind === 'car' ? ( CAR_TYPES[ carType ] ? carType : CAR_TYPE_KEYS[ carCycle ++ % CAR_TYPE_KEYS.length ] ) : null;
 			const s = kind === 'car' ? carSpec( type ) : SPECS[ kind ];
 			const f = forwardOf( yaw, new THREE.Vector3() );
 			const p = feet.clone().addScaledVector( f, s.spawnAhead );
