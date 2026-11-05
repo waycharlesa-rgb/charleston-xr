@@ -218,6 +218,16 @@
 		<label class="check"><input type="checkbox" id="show-stats"> Show performance (frame rate and loading)</label>
 	</fieldset>
 
+	<fieldset>
+		<label for="model-file">Your own car model</label>
+		<input id="model-file" type="file" accept=".glb,model/gltf-binary">
+		<div class="row">
+			<button type="button" id="model-turn" disabled>Turn it around</button>
+			<button type="button" id="model-remove" disabled>Remove</button>
+		</div>
+		<p id="model-state" class="hint" aria-live="polite">Load a .glb file. It stays on this device and is never uploaded.</p>
+	</fieldset>
+
 	<div class="actions">
 		<button class="primary" id="enter-xr" disabled>Enter headset</button>
 		<button id="enter-screen" disabled>Explore on screen</button>

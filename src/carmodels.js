@@ -541,8 +541,109 @@ function pickupBed( def, mats, rearWheelZ ) {
 
 // ---------------------------------------------------------------- assembly
 
+// ---------------------------------------------------------------- your own model
+// A .glb you load on the headset becomes the 'custom' car: laid along the car's
+// axis, nose forward, sized to a real car and set on the ground. It is kept on
+// the device only and never uploaded anywhere.
+
+let customTemplate = null;
+
+export function registerCustomCar( scene, { name = 'Your model', turn = false } = {} ) {
+
+	const inner = scene;
+	const root = new THREE.Group();
+	root.add( inner );
+	const box = new THREE.Box3();
+	const size = new THREE.Vector3(), center = new THREE.Vector3();
+	const measure = () => {
+
+		root.updateMatrixWorld( true );
+		box.setFromObject( inner );
+		box.getSize( size );
+		box.getCenter( center );
+
+	};
+
+	measure();
+	// glTF cars usually face +Z; ours drive toward -Z. Lay the length along Z first.
+	const alongX = size.x > size.z;
+	inner.rotation.y = ( alongX ? Math.PI / 2 : 0 ) + Math.PI + ( turn ? Math.PI : 0 );
+	measure();
+	// models made in other units: centimetres, millimetres or inches; anything else becomes a 5.05 m car
+	const len = size.z;
+	const unit = len >= 2.5 && len <= 8 ? 1 : len >= 250 && len <= 800 ? 0.01 : len >= 2500 && len <= 8000 ? 0.001 : len >= 98 && len <= 315 ? 0.0254 : 5.05 / len;
+	if ( unit !== 1 ) {
+
+		inner.scale.multiplyScalar( unit );
+		measure();
+
+	}
+
+	inner.position.x -= center.x;
+	inner.position.z -= center.z;
+	inner.position.y -= box.min.y;
+	measure();
+
+	let tris = 0;
+	inner.traverse( o => {
+
+		if ( ! o.isMesh ) return;
+		const g = o.geometry;
+		tris += ( g.index ? g.index.count : g.attributes.position.count ) / 3;
+		o.frustumCulled = true;
+
+	} );
+
+	const L = size.z, W = size.x, H = size.y;
+	CAR_TYPES.custom = {
+		label: name, basedOn: 'your own model', custom: true,
+		L, W, H, wheelbase: L * 0.59, frontOverhang: L * 0.18, wheelR: Math.min( 0.42, H * 0.21 ),
+		tireW: 0.27, rimR: 0.28, eye: { x: - W * 0.2, y: H * 0.84, u: 0.5 }, maxFwd: 28, steerMax: 0.55,
+	};
+	customTemplate = root;
+	return { L, W, H, tris: Math.round( tris ) };
+
+}
+
+export function clearCustomCar() {
+
+	delete CAR_TYPES.custom;
+	customTemplate = null;
+
+}
+
+function buildCustomModel() {
+
+	const def = CAR_TYPES.custom;
+	const root = new THREE.Group();
+	const body = new THREE.Group();
+	root.add( body );
+	body.add( customTemplate.clone( true ) ); // shares geometry and materials with the template
+	// the physics needs wheel positions; the model's own wheels stay as modelled
+	const wheels = [];
+	const zF = - def.L / 2 + def.frontOverhang, zR = zF + def.wheelbase, x = def.W / 2 - 0.2;
+	for ( const [ wx, wz, front ] of [ [ - x, zF, true ], [ x, zF, true ], [ - x, zR, false ], [ x, zR, false ] ] ) {
+
+		const pivot = new THREE.Group();
+		pivot.position.set( wx, def.wheelR, wz );
+		const spin = new THREE.Group();
+		pivot.add( spin );
+		root.add( pivot );
+		wheels.push( { pivot, spin, front, radius: def.wheelR, local: new THREE.Vector3( wx, 0, wz ) } );
+
+	}
+
+	const mats = carMaterials();
+	const shadow = new THREE.Mesh( new THREE.PlaneGeometry( def.W * 1.2, def.L * 1.1 ).rotateX( - Math.PI / 2 ), mats.shadow );
+	shadow.position.y = 0.03;
+	root.add( shadow );
+	return { root, body, wheels, def, mats, shadow, display: { draw() {} } };
+
+}
+
 export function buildCarModel( typeKey, { paint, interior = false, glassOpacity, detail = 160 } = {} ) {
 
+	if ( typeKey === 'custom' && customTemplate ) return buildCustomModel();
 	const def = CAR_TYPES[ typeKey ];
 	const mats = carMaterials( { paint, glassOpacity: glassOpacity ?? ( interior ? ( def.privacyGlass ? 0.4 : 0.28 ) : def.privacyGlass ? 0.82 : 0.55 ) } );
 	const root = new THREE.Group();

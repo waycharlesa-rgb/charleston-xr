@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TilesRenderer } from '3d-tiles-renderer/three';
 import { GoogleCloudAuthPlugin } from '3d-tiles-renderer/core/plugins';
 import {
@@ -14,7 +15,7 @@ import { PLACES, ORIGIN, BOAT_SPOTS } from './places.js';
 import { HarborAmbience } from './audio.js';
 import { createAlchemy } from './alchemy.js';
 import { createVehicles, SPECS } from './vehicles.js';
-import { CAR_TYPES, CAR_TYPE_KEYS } from './carmodels.js';
+import { CAR_TYPES, CAR_TYPE_KEYS, registerCustomCar, clearCustomCar } from './carmodels.js';
 import { createWristMenu } from './wristmenu.js';
 import { createTraffic } from './traffic.js';
 
@@ -92,6 +93,10 @@ const ui = {
 	hudMenu: $( 'hud-menu' ),
 	vehicleExit: $( 'vehicle-toggle' ),
 	carModel: $( 'car-model' ),
+	modelFile: $( 'model-file' ),
+	modelTurn: $( 'model-turn' ),
+	modelRemove: $( 'model-remove' ),
+	modelState: $( 'model-state' ),
 	hint: $( 'hint' ),
 	crosshair: $( 'crosshair' ),
 	attribution: $( 'attribution' ),
@@ -759,6 +764,7 @@ function enterNearest() {
 
 // which car you summon: chosen on the palm menu or the on-screen picker, remembered
 let carChoice = CAR_TYPES[ store.get( 'car' ) ] ? store.get( 'car' ) : 'rangerover';
+const customWasChosen = store.get( 'car' ) === 'custom'; // the model itself loads a moment later
 
 function setCarChoice( type ) {
 
@@ -1525,7 +1531,136 @@ for ( const k of CAR_TYPE_KEYS ) {
 
 }
 
-ui.carModel.value = carChoice;
+ui.carModel.value = CAR_TYPES[ carChoice ] ? carChoice : 'rangerover';
+
+// ---------------------------------------------------------------- your own car model
+// Kept in this browser's IndexedDB, never uploaded: a model's licence usually
+// allows personal use but not redistribution, and the game's site is public.
+
+const idb = {
+	open() {
+
+		return new Promise( ( resolve, reject ) => {
+
+			const req = indexedDB.open( 'charleston-xr', 1 );
+			req.onupgradeneeded = () => req.result.createObjectStore( 'files' );
+			req.onsuccess = () => resolve( req.result );
+			req.onerror = () => reject( req.error );
+
+		} );
+
+	},
+	async run( mode, fn ) {
+
+		const db = await this.open();
+		return new Promise( ( resolve, reject ) => {
+
+			const tx = db.transaction( 'files', mode );
+			const req = fn( tx.objectStore( 'files' ) );
+			tx.oncomplete = () => resolve( req?.result );
+			tx.onerror = () => reject( tx.error );
+
+		} );
+
+	},
+	get: k => idb.run( 'readonly', s => s.get( k ) ),
+	set: ( k, v ) => idb.run( 'readwrite', s => s.put( v, k ) ),
+	del: k => idb.run( 'readwrite', s => s.delete( k ) ),
+};
+
+let customFile = null; // { name, buf, turn }
+
+function showCustomOption( label ) {
+
+	let opt = ui.carModel.querySelector( 'option[value="custom"]' );
+	if ( ! opt ) {
+
+		opt = document.createElement( 'option' );
+		opt.value = 'custom';
+		ui.carModel.append( opt );
+
+	}
+
+	opt.textContent = label;
+
+}
+
+async function loadCustomModel( file, { select = true } = {} ) {
+
+	ui.modelState.textContent = 'Loading ' + file.name + '…';
+	const loader = new GLTFLoader().setDRACOLoader( draco );
+	try {
+
+		const gltf = await loader.parseAsync( file.buf.slice( 0 ), './' );
+		const name = file.name.replace( /\.glb$/i, '' );
+		const info = registerCustomCar( gltf.scene, { name, turn: file.turn } );
+		customFile = file;
+		showCustomOption( 'Your model: ' + name );
+		if ( select ) setCarChoice( 'custom' );
+		ui.modelTurn.disabled = false;
+		ui.modelRemove.disabled = false;
+		const heavy = info.tris > 300000 ? ' That is heavy for the headset; expect a lower frame rate.' : '';
+		ui.modelState.textContent = `Loaded “${ name }”: ${ info.L.toFixed( 2 ) } m long, ${ info.H.toFixed( 2 ) } m tall, ${ info.tris.toLocaleString() } triangles.${ heavy } Summon a car to drive it.`;
+
+	} catch ( err ) {
+
+		ui.modelState.textContent = 'Could not read that file as a 3D model: ' + ( err?.message || err ) + '. Use a single .glb file.';
+
+	}
+
+}
+
+ui.modelFile.addEventListener( 'change', async () => {
+
+	const f = ui.modelFile.files?.[ 0 ];
+	if ( ! f ) return;
+	const file = { name: f.name, buf: await f.arrayBuffer(), turn: false };
+	await loadCustomModel( file );
+	try {
+
+		await idb.set( 'car-model', file );
+
+	} catch { /* storage blocked: the model works until the page is closed */ }
+
+} );
+
+ui.modelTurn.addEventListener( 'click', async () => {
+
+	if ( ! customFile ) return;
+	customFile.turn = ! customFile.turn;
+	await loadCustomModel( customFile );
+	try {
+
+		await idb.set( 'car-model', customFile );
+
+	} catch { /* fine without storage */ }
+
+} );
+
+ui.modelRemove.addEventListener( 'click', async () => {
+
+	customFile = null;
+	clearCustomCar();
+	ui.carModel.querySelector( 'option[value="custom"]' )?.remove();
+	if ( carChoice === 'custom' ) setCarChoice( 'rangerover' );
+	ui.modelTurn.disabled = true;
+	ui.modelRemove.disabled = true;
+	ui.modelFile.value = '';
+	ui.modelState.textContent = 'Removed. Load a .glb file to use your own model.';
+	try {
+
+		await idb.del( 'car-model' );
+
+	} catch { /* nothing stored */ }
+
+} );
+
+// bring back a model loaded on an earlier visit
+idb.get( 'car-model' ).then( f => {
+
+	if ( f?.buf ) loadCustomModel( f, { select: customWasChosen } );
+
+} ).catch( () => {} );
 ui.carModel.addEventListener( 'change', () => {
 
 	setCarChoice( ui.carModel.value );
